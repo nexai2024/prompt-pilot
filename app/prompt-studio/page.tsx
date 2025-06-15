@@ -11,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, Play, Save, Settings, Brain, Zap, Plus, Copy, Trash2, Edit, TestTube, Variable as Variables, History, Download, Upload, RefreshCw, Check, X, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Play, Save, Settings, Brain, Zap, Plus, Copy, Trash2, Edit, TestTube, Variable as Variables, History, Download, Upload, RefreshCw, Check, X, AlertTriangle, Sparkles, Code, Wand2 } from 'lucide-react';
 
 export default function PromptStudio() {
   const [prompt, setPrompt] = useState('');
@@ -27,13 +27,17 @@ export default function PromptStudio() {
       name: 'Content Generator',
       description: 'Generate engaging content from topics',
       prompt: 'Create engaging content about {{topic}}. Include key points, examples, and a compelling conclusion.',
-      variables: [{ name: 'topic', value: '', description: 'Content topic' }]
+      variables: [{ name: 'topic', value: '', description: 'Content topic' }],
+      category: 'Content',
+      color: 'from-purple-500 to-pink-500'
     },
     {
       name: 'Sentiment Analyzer',
       description: 'Analyze text sentiment and emotions',
       prompt: 'Analyze the sentiment of the following text and provide a detailed breakdown: {{text}}',
-      variables: [{ name: 'text', value: '', description: 'Text to analyze' }]
+      variables: [{ name: 'text', value: '', description: 'Text to analyze' }],
+      category: 'Analysis',
+      color: 'from-blue-500 to-cyan-500'
     },
     {
       name: 'Code Reviewer',
@@ -42,7 +46,9 @@ export default function PromptStudio() {
       variables: [
         { name: 'language', value: '', description: 'Programming language' },
         { name: 'code', value: '', description: 'Code to review' }
-      ]
+      ],
+      category: 'Development',
+      color: 'from-green-500 to-emerald-500'
     },
     {
       name: 'Email Assistant',
@@ -53,15 +59,17 @@ export default function PromptStudio() {
         { name: 'recipient', value: '', description: 'Email recipient' },
         { name: 'context', value: '', description: 'Email context' },
         { name: 'tone', value: '', description: 'Email tone' }
-      ]
+      ],
+      category: 'Communication',
+      color: 'from-orange-500 to-red-500'
     }
   ];
 
   const recentPrompts = [
-    { name: 'Blog Post Generator', modified: '2 hours ago', status: 'deployed' },
-    { name: 'Product Description Writer', modified: '1 day ago', status: 'draft' },
-    { name: 'Social Media Caption Creator', modified: '3 days ago', status: 'testing' },
-    { name: 'Email Subject Line Optimizer', modified: '1 week ago', status: 'deployed' }
+    { name: 'Blog Post Generator', modified: '2 hours ago', status: 'deployed', category: 'Content' },
+    { name: 'Product Description Writer', modified: '1 day ago', status: 'draft', category: 'Marketing' },
+    { name: 'Social Media Caption Creator', modified: '3 days ago', status: 'testing', category: 'Social' },
+    { name: 'Email Subject Line Optimizer', modified: '1 week ago', status: 'deployed', category: 'Email' }
   ];
 
   const addVariable = () => {
@@ -99,9 +107,9 @@ export default function PromptStudio() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white">
       {/* Header */}
-      <div className="bg-white border-b">
+      <div className="bg-white border-b shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center space-x-4">
@@ -113,20 +121,26 @@ export default function PromptStudio() {
               </Button>
               <div className="h-6 w-px bg-gray-300" />
               <div className="flex items-center space-x-2">
-                <Brain className="w-6 h-6 text-purple-600" />
+                <div className="w-8 h-8 bg-gradient-to-r from-purple-600 to-pink-600 rounded-xl flex items-center justify-center shadow-lg">
+                  <Brain className="w-5 h-5 text-white" />
+                </div>
                 <h1 className="text-xl font-bold text-gray-900">Prompt Studio</h1>
+                <Badge className="bg-gradient-to-r from-purple-100 to-pink-100 text-purple-700 border-purple-200">
+                  <Sparkles className="w-3 h-3 mr-1" />
+                  AI-Powered
+                </Badge>
               </div>
             </div>
             <div className="flex items-center space-x-3">
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" className="hidden sm:flex">
                 <History className="w-4 h-4 mr-2" />
                 Version History
               </Button>
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" className="hidden sm:flex">
                 <Download className="w-4 h-4 mr-2" />
                 Export
               </Button>
-              <Button size="sm" className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700">
+              <Button size="sm" className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 shadow-lg hover:shadow-xl transition-all duration-300">
                 <Save className="w-4 h-4 mr-2" />
                 Save Prompt
               </Button>
@@ -140,38 +154,51 @@ export default function PromptStudio() {
           {/* Sidebar */}
           <div className="lg:col-span-1 space-y-6">
             {/* Templates */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Quick Start Templates</CardTitle>
+            <Card className="shadow-xl border-0 bg-white">
+              <CardHeader className="border-b border-gray-100">
+                <CardTitle className="text-lg flex items-center">
+                  <Wand2 className="w-5 h-5 mr-2 text-purple-600" />
+                  Quick Start Templates
+                </CardTitle>
                 <CardDescription>Choose a template to get started quickly</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-3">
+              <CardContent className="p-4 space-y-3">
                 {promptTemplates.map((template, index) => (
                   <div
                     key={index}
-                    className="p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors"
+                    className="p-4 border border-gray-100 rounded-xl cursor-pointer hover:bg-gray-50 transition-all duration-200 group"
                     onClick={() => loadTemplate(template)}
                   >
-                    <h4 className="font-medium text-sm text-gray-900">{template.name}</h4>
-                    <p className="text-xs text-gray-600 mt-1">{template.description}</p>
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="font-semibold text-sm text-gray-900 group-hover:text-purple-600 transition-colors">{template.name}</h4>
+                      <Badge variant="outline" className="text-xs">{template.category}</Badge>
+                    </div>
+                    <p className="text-xs text-gray-600 leading-relaxed">{template.description}</p>
+                    <div className={`mt-2 h-1 bg-gradient-to-r ${template.color} rounded-full opacity-60`}></div>
                   </div>
                 ))}
               </CardContent>
             </Card>
 
             {/* Recent Prompts */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Recent Prompts</CardTitle>
+            <Card className="shadow-xl border-0 bg-white">
+              <CardHeader className="border-b border-gray-100">
+                <CardTitle className="text-lg flex items-center">
+                  <History className="w-5 h-5 mr-2 text-blue-600" />
+                  Recent Prompts
+                </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
+              <CardContent className="p-4 space-y-3">
                 {recentPrompts.map((prompt, index) => (
-                  <div key={index} className="flex items-center justify-between p-2 hover:bg-gray-50 rounded cursor-pointer">
+                  <div key={index} className="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors">
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-900 truncate">{prompt.name}</p>
-                      <p className="text-xs text-gray-500">{prompt.modified}</p>
+                      <div className="flex items-center space-x-2 mt-1">
+                        <p className="text-xs text-gray-500">{prompt.modified}</p>
+                        <Badge variant="outline" className="text-xs">{prompt.category}</Badge>
+                      </div>
                     </div>
-                    <Badge variant={prompt.status === 'deployed' ? 'default' : prompt.status === 'testing' ? 'secondary' : 'outline'}>
+                    <Badge variant={prompt.status === 'deployed' ? 'default' : prompt.status === 'testing' ? 'secondary' : 'outline'} className="ml-2">
                       {prompt.status}
                     </Badge>
                   </div>
@@ -183,31 +210,31 @@ export default function PromptStudio() {
           {/* Main Content */}
           <div className="lg:col-span-3">
             <Tabs defaultValue="editor" className="space-y-6">
-              <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="editor">Prompt Editor</TabsTrigger>
-                <TabsTrigger value="test">Test & Debug</TabsTrigger>
-                <TabsTrigger value="settings">Model Settings</TabsTrigger>
+              <TabsList className="grid w-full grid-cols-3 bg-gray-100 p-1 rounded-xl">
+                <TabsTrigger value="editor" className="rounded-lg">Prompt Editor</TabsTrigger>
+                <TabsTrigger value="test" className="rounded-lg">Test & Debug</TabsTrigger>
+                <TabsTrigger value="settings" className="rounded-lg">Model Settings</TabsTrigger>
               </TabsList>
 
               <TabsContent value="editor" className="space-y-6">
                 {/* Prompt Editor */}
-                <Card>
-                  <CardHeader>
+                <Card className="shadow-xl border-0 bg-white">
+                  <CardHeader className="border-b border-gray-100">
                     <CardTitle className="flex items-center">
-                      <Edit className="w-5 h-5 mr-2" />
+                      <Edit className="w-5 h-5 mr-2 text-green-600" />
                       Prompt Editor
                     </CardTitle>
                     <CardDescription>
                       Create your AI prompt. Use {'{{variable_name}}'} syntax for dynamic variables.
                     </CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-4">
+                  <CardContent className="p-6 space-y-6">
                     <div>
                       <Label htmlFor="prompt-name" className="text-sm font-medium">Prompt Name</Label>
                       <Input
                         id="prompt-name"
                         placeholder="Enter a descriptive name for your prompt"
-                        className="mt-1"
+                        className="mt-2 border-gray-200 focus:border-purple-500 focus:ring-purple-500"
                       />
                     </div>
                     <div>
@@ -215,26 +242,32 @@ export default function PromptStudio() {
                       <Textarea
                         id="prompt-text"
                         placeholder="Enter your prompt here. Use {{variable_name}} for dynamic content..."
-                        className="mt-1 min-h-[200px] font-mono"
+                        className="mt-2 min-h-[200px] font-mono border-gray-200 focus:border-purple-500 focus:ring-purple-500"
                         value={prompt}
                         onChange={(e) => setPrompt(e.target.value)}
                       />
-                      <p className="text-xs text-gray-500 mt-1">
-                        {prompt.length} characters
-                      </p>
+                      <div className="flex items-center justify-between mt-2">
+                        <p className="text-xs text-gray-500">
+                          {prompt.length} characters
+                        </p>
+                        <Button size="sm" variant="outline" className="text-xs">
+                          <Code className="w-3 h-3 mr-1" />
+                          Format
+                        </Button>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
 
                 {/* Variables */}
-                <Card>
-                  <CardHeader>
+                <Card className="shadow-xl border-0 bg-white">
+                  <CardHeader className="border-b border-gray-100">
                     <CardTitle className="flex items-center justify-between">
                       <div className="flex items-center">
-                        <Variables className="w-5 h-5 mr-2" />
+                        <Variables className="w-5 h-5 mr-2 text-blue-600" />
                         Variables
                       </div>
-                      <Button size="sm" variant="outline" onClick={addVariable}>
+                      <Button size="sm" variant="outline" onClick={addVariable} className="bg-blue-50 hover:bg-blue-100 text-blue-600 border-blue-200">
                         <Plus className="w-4 h-4 mr-2" />
                         Add Variable
                       </Button>
@@ -243,38 +276,38 @@ export default function PromptStudio() {
                       Define variables that can be dynamically replaced in your prompt.
                     </CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-4">
+                  <CardContent className="p-6 space-y-4">
                     {variables.map((variable, index) => (
-                      <div key={index} className="flex items-end space-x-3 p-4 border rounded-lg">
+                      <div key={index} className="flex items-end space-x-3 p-4 border border-gray-100 rounded-xl bg-gray-50">
                         <div className="flex-1 grid grid-cols-3 gap-3">
                           <div>
-                            <Label htmlFor={`var-name-${index}`} className="text-xs">Variable Name</Label>
+                            <Label htmlFor={`var-name-${index}`} className="text-xs font-medium">Variable Name</Label>
                             <Input
                               id={`var-name-${index}`}
                               placeholder="variable_name"
                               value={variable.name}
                               onChange={(e) => updateVariable(index, 'name', e.target.value)}
-                              className="mt-1"
+                              className="mt-1 border-gray-200"
                             />
                           </div>
                           <div>
-                            <Label htmlFor={`var-value-${index}`} className="text-xs">Test Value</Label>
+                            <Label htmlFor={`var-value-${index}`} className="text-xs font-medium">Test Value</Label>
                             <Input
                               id={`var-value-${index}`}
                               placeholder="Test value"
                               value={variable.value}
                               onChange={(e) => updateVariable(index, 'value', e.target.value)}
-                              className="mt-1"
+                              className="mt-1 border-gray-200"
                             />
                           </div>
                           <div>
-                            <Label htmlFor={`var-desc-${index}`} className="text-xs">Description</Label>
+                            <Label htmlFor={`var-desc-${index}`} className="text-xs font-medium">Description</Label>
                             <Input
                               id={`var-desc-${index}`}
                               placeholder="Variable description"
                               value={variable.description}
                               onChange={(e) => updateVariable(index, 'description', e.target.value)}
-                              className="mt-1"
+                              className="mt-1 border-gray-200"
                             />
                           </div>
                         </div>
@@ -282,16 +315,16 @@ export default function PromptStudio() {
                           size="sm"
                           variant="outline"
                           onClick={() => removeVariable(index)}
-                          className="text-red-600 hover:text-red-700"
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>
                       </div>
                     ))}
                     {variables.length === 0 && (
-                      <div className="text-center py-8 text-gray-500">
-                        <Variables className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                        <p>No variables defined yet.</p>
+                      <div className="text-center py-12 text-gray-500">
+                        <Variables className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+                        <p className="text-lg font-medium">No variables defined yet.</p>
                         <p className="text-sm">Add variables to make your prompts dynamic.</p>
                       </div>
                     )}
@@ -301,17 +334,17 @@ export default function PromptStudio() {
 
               <TabsContent value="test" className="space-y-6">
                 {/* Test Interface */}
-                <Card>
-                  <CardHeader>
+                <Card className="shadow-xl border-0 bg-white">
+                  <CardHeader className="border-b border-gray-100">
                     <CardTitle className="flex items-center justify-between">
                       <div className="flex items-center">
-                        <TestTube className="w-5 h-5 mr-2" />
+                        <TestTube className="w-5 h-5 mr-2 text-orange-600" />
                         Test Your Prompt
                       </div>
                       <Button
                         onClick={testPrompt}
                         disabled={isLoading || !prompt}
-                        className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
+                        className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 shadow-lg hover:shadow-xl transition-all duration-300"
                       >
                         {isLoading ? (
                           <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
@@ -325,11 +358,11 @@ export default function PromptStudio() {
                       Test your prompt with sample data to see how it performs.
                     </CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-4">
+                  <CardContent className="p-6 space-y-6">
                     {/* Preview */}
                     <div>
                       <Label className="text-sm font-medium">Prompt Preview</Label>
-                      <div className="mt-1 p-4 bg-gray-50 rounded-lg border">
+                      <div className="mt-2 p-4 bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl border border-gray-200">
                         <pre className="text-sm whitespace-pre-wrap font-mono">
                           {prompt ? (
                             variables.reduce((text, variable) => {
@@ -347,11 +380,19 @@ export default function PromptStudio() {
                     {/* Output */}
                     <div>
                       <Label className="text-sm font-medium">Test Output</Label>
-                      <div className="mt-1 p-4 bg-white rounded-lg border min-h-[200px]">
+                      <div className="mt-2 p-4 bg-gray-900 rounded-xl border min-h-[200px] relative overflow-hidden">
+                        {isLoading && (
+                          <div className="absolute inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center">
+                            <div className="flex items-center space-x-2 text-green-400">
+                              <RefreshCw className="w-5 h-5 animate-spin" />
+                              <span>Generating response...</span>
+                            </div>
+                          </div>
+                        )}
                         {testOutput ? (
-                          <pre className="text-sm whitespace-pre-wrap">{testOutput}</pre>
+                          <pre className="text-sm whitespace-pre-wrap text-green-400">{testOutput}</pre>
                         ) : (
-                          <div className="flex items-center justify-center h-32 text-gray-400">
+                          <div className="flex items-center justify-center h-32 text-gray-500">
                             <div className="text-center">
                               <TestTube className="w-8 h-8 mx-auto mb-2" />
                               <p>Run a test to see the output</p>
@@ -366,22 +407,22 @@ export default function PromptStudio() {
 
               <TabsContent value="settings" className="space-y-6">
                 {/* Model Settings */}
-                <Card>
-                  <CardHeader>
+                <Card className="shadow-xl border-0 bg-white">
+                  <CardHeader className="border-b border-gray-100">
                     <CardTitle className="flex items-center">
-                      <Settings className="w-5 h-5 mr-2" />
+                      <Settings className="w-5 h-5 mr-2 text-purple-600" />
                       Model Configuration
                     </CardTitle>
                     <CardDescription>
                       Configure the AI model and parameters for your prompt.
                     </CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-6">
+                  <CardContent className="p-6 space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div>
                         <Label htmlFor="model-select" className="text-sm font-medium">AI Model</Label>
                         <Select value={selectedModel} onValueChange={setSelectedModel}>
-                          <SelectTrigger className="mt-1">
+                          <SelectTrigger className="mt-2 border-gray-200">
                             <SelectValue placeholder="Select a model" />
                           </SelectTrigger>
                           <SelectContent>
@@ -400,16 +441,18 @@ export default function PromptStudio() {
                         <Label htmlFor="temperature" className="text-sm font-medium">
                           Temperature ({temperature})
                         </Label>
-                        <input
-                          type="range"
-                          id="temperature"
-                          min="0"
-                          max="2"
-                          step="0.1"
-                          value={temperature}
-                          onChange={(e) => setTemperature(parseFloat(e.target.value))}
-                          className="mt-1 w-full"
-                        />
+                        <div className="mt-2 px-3 py-2 border border-gray-200 rounded-lg">
+                          <input
+                            type="range"
+                            id="temperature"
+                            min="0"
+                            max="2"
+                            step="0.1"
+                            value={temperature}
+                            onChange={(e) => setTemperature(parseFloat(e.target.value))}
+                            className="w-full accent-purple-600"
+                          />
+                        </div>
                         <p className="text-xs text-gray-500 mt-1">
                           Controls randomness. Lower values for more focused, higher for more creative responses.
                         </p>
@@ -424,7 +467,7 @@ export default function PromptStudio() {
                           max="4000"
                           value={maxTokens}
                           onChange={(e) => setMaxTokens(parseInt(e.target.value))}
-                          className="mt-1"
+                          className="mt-2 border-gray-200"
                         />
                         <p className="text-xs text-gray-500 mt-1">
                           Maximum number of tokens in the response.
@@ -434,7 +477,7 @@ export default function PromptStudio() {
                       <div>
                         <Label className="text-sm font-medium">Response Format</Label>
                         <Select defaultValue="text">
-                          <SelectTrigger className="mt-1">
+                          <SelectTrigger className="mt-2 border-gray-200">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -447,87 +490,40 @@ export default function PromptStudio() {
                       </div>
                     </div>
 
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <Label className="text-sm font-medium">Streaming Response</Label>
-                          <p className="text-xs text-gray-500">Enable real-time response streaming</p>
+                    <div className="space-y-4 pt-4 border-t border-gray-100">
+                      <h4 className="font-medium text-gray-900">Advanced Options</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
+                          <div>
+                            <Label className="text-sm font-medium">Streaming Response</Label>
+                            <p className="text-xs text-gray-500">Enable real-time response streaming</p>
+                          </div>
+                          <Switch />
                         </div>
-                        <Switch />
-                      </div>
 
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <Label className="text-sm font-medium">Content Filtering</Label>
-                          <p className="text-xs text-gray-500">Apply content safety filters</p>
+                        <div className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
+                          <div>
+                            <Label className="text-sm font-medium">Content Filtering</Label>
+                            <p className="text-xs text-gray-500">Apply content safety filters</p>
+                          </div>
+                          <Switch defaultChecked />
                         </div>
-                        <Switch defaultChecked />
-                      </div>
 
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <Label className="text-sm font-medium">Caching</Label>
-                          <p className="text-xs text-gray-500">Cache responses for improved performance</p>
+                        <div className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
+                          <div>
+                            <Label className="text-sm font-medium">Caching</Label>
+                            <p className="text-xs text-gray-500">Cache responses for improved performance</p>
+                          </div>
+                          <Switch defaultChecked />
                         </div>
-                        <Switch defaultChecked />
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
 
-                {/* Advanced Settings */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Advanced Settings</CardTitle>
-                    <CardDescription>
-                      Fine-tune additional parameters for your specific use case.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <Label htmlFor="top-p" className="text-sm font-medium">Top P</Label>
-                        <Input
-                          id="top-p"
-                          type="number"
-                          min="0"
-                          max="1"
-                          step="0.1"
-                          defaultValue="1"
-                          className="mt-1"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="frequency-penalty" className="text-sm font-medium">Frequency Penalty</Label>
-                        <Input
-                          id="frequency-penalty"
-                          type="number"
-                          min="-2"
-                          max="2"
-                          step="0.1"
-                          defaultValue="0"
-                          className="mt-1"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="presence-penalty" className="text-sm font-medium">Presence Penalty</Label>
-                        <Input
-                          id="presence-penalty"
-                          type="number"
-                          min="-2"
-                          max="2"
-                          step="0.1"
-                          defaultValue="0"
-                          className="mt-1"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="stop-sequences" className="text-sm font-medium">Stop Sequences</Label>
-                        <Input
-                          id="stop-sequences"
-                          placeholder="Enter stop sequences (comma-separated)"
-                          className="mt-1"
-                        />
+                        <div className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
+                          <div>
+                            <Label className="text-sm font-medium">Auto-save</Label>
+                            <p className="text-xs text-gray-500">Automatically save changes</p>
+                          </div>
+                          <Switch defaultChecked />
+                        </div>
                       </div>
                     </div>
                   </CardContent>
