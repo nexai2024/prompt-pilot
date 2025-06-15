@@ -1,9 +1,18 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+// Check if we're in the browser and have the required environment variables
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.warn('Supabase environment variables are not set. Please check your .env.local file.');
+}
+
+// Create a fallback client for development
+export const supabase = createClient(
+  supabaseUrl || 'https://placeholder.supabase.co',
+  supabaseAnonKey || 'placeholder-key'
+);
 
 // Database types
 export interface Database {
@@ -368,6 +377,29 @@ export interface Database {
           expires_at?: string | null;
           is_active?: boolean;
           last_used_at?: string | null;
+        };
+      };
+      usage_metrics: {
+        Row: {
+          id: string;
+          organization_id: string;
+          metric_type: string;
+          value: number;
+          period_start: string;
+          period_end: string;
+          created_at: string;
+        };
+        Insert: {
+          organization_id: string;
+          metric_type: string;
+          value: number;
+          period_start: string;
+          period_end: string;
+        };
+        Update: {
+          value?: number;
+          period_start?: string;
+          period_end?: string;
         };
       };
     };

@@ -1,7 +1,11 @@
 'use client';
 
-import { AuthProvider as AuthHookProvider } from '@/lib/hooks/useAuth';
+import { AuthProvider as AuthContextProvider } from '@/lib/hooks/useAuth';
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  return <AuthHookProvider>{children}</AuthHookProvider>;
+interface AuthProviderProps {
+  children: React.ReactNode;
+}
+
+export function AuthProvider({ children }: AuthProviderProps) {
+  return <AuthContextProvider>{children}</AuthContextProvider>;
 }

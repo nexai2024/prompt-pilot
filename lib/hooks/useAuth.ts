@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, createContext, useContext } from 'react';
+import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
 import { auth, type AuthUser } from '../auth';
 
 interface AuthContextType {
@@ -18,7 +18,11 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
+interface AuthProviderProps {
+  children: ReactNode;
+}
+
+export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -26,6 +30,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Get initial user
     auth.getCurrentUser().then((user) => {
       setUser(user);
+      setLoading(false);
+    }).catch((error) => {
+      console.error('Error getting current user:', error);
       setLoading(false);
     });
 
@@ -46,8 +53,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoading(true);
     try {
       await auth.signIn(email, password);
-    } finally {
+    } catch (error) {
       setLoading(false);
+      throw error;
     }
   };
 
@@ -59,8 +67,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoading(true);
     try {
       await auth.signUp(email, password, userData);
-    } finally {
+    } catch (error) {
       setLoading(false);
+      throw error;
     }
   };
 
@@ -68,30 +77,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoading(true);
     try {
       await auth.signOut();
-    } finally {
+      setUser(null);
+    } catch (error) {
       setLoading(false);
+      throw error;
     }
   };
 
   const updateProfile = async (updates: any) => {
-    const updatedProfile = await auth.updateProfile(updates);
-    if (user) {
-      setUser({
-        ...user,
-        profile: { ...user.profile, ...updatedProfile },
-      });
+    try {
+      const updatedProfile = await auth.updateProfile(updates);
+      if (user) {
+        setUser({
+          ...user,
+          profile: { ...user.profile, ...updatedProfile },
+        });
+      }
+    } catch (error) {
+      throw error;
     }
   };
 
+  const value: AuthContextType = {
+    user,
+    loading,
+    signIn,
+    signUp,
+    signOut,
+    updateProfile,
+  };
+
   return (
-    <AuthContext.Provider value={{
-      user,
-      loading,
-      signIn,
-      signUp,
-      signOut,
-      updateProfile,
-    }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );
