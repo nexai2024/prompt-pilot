@@ -155,7 +155,7 @@ export const auth = {
 
   // Listen to auth state changes
   onAuthStateChange(callback: (user: AuthUser | null) => void) {
-    return supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session?.user) {
         const user = await this.getCurrentUser();
         callback(user);
@@ -163,5 +163,7 @@ export const auth = {
         callback(null);
       }
     });
+
+    return subscription;
   },
 };
