@@ -1,6 +1,6 @@
 'use client';
 
-import { AuthProvider as AuthContextProvider } from '@/lib/hooks/useAuth';
+import { useAuth, AuthProvider } from '@/lib/hooks/useAuth';
 
 interface AuthProviderProps {
   children: React.ReactNode;
