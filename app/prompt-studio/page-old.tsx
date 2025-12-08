@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,353 +11,41 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, Play, Save, Settings, Brain, Zap, Plus, Copy, Trash2, Edit, TestTube, Variable as Variables, History, Download, Upload, RefreshCw, Check, X, AlertTriangle, Sparkles, Code, Wand2, Loader2 } from 'lucide-react';
-import { toast } from 'sonner';
-import { useOrganization } from '@/lib/hooks/useOrganization';
-
-interface Variable {
-  id?: string;
-  name: string;
-  value?: string;
-  type: string;
-  description: string;
-  default_value?: string;
-  required: boolean;
-}
-
-interface Prompt {
-  id: string;
-  name: string;
-  description: string;
-  content: string;
-  model: string;
-  temperature: number;
-  max_tokens: number;
-  response_format: string;
-  streaming: boolean;
-  content_filtering: boolean;
-  caching: boolean;
-  status: string;
-  created_at: string;
-  updated_at: string;
-}
+import { ArrowLeft, Play, Save, Settings, Brain, Zap, Plus, Copy, Trash2, Edit, TestTube, Variable as Variables, History, Download, Upload, RefreshCw, Check, X, AlertTriangle, Sparkles, Code, Wand2 } from 'lucide-react';
 
 export default function PromptStudio() {
-  const { currentOrganization } = useOrganization();
-
-  // Prompt state
-  const [promptId, setPromptId] = useState<string | null>(null);
-  const [promptName, setPromptName] = useState('');
-  const [promptDescription, setPromptDescription] = useState('');
   const [prompt, setPrompt] = useState('');
-  const [variables, setVariables] = useState<Variable[]>([]);
-
-  // Model settings
+  const [variables, setVariables] = useState([{ name: 'user_input', value: '', description: 'User input text' }]);
+  const [testOutput, setTestOutput] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const [selectedModel, setSelectedModel] = useState('gpt-4');
   const [temperature, setTemperature] = useState(0.7);
   const [maxTokens, setMaxTokens] = useState(150);
-  const [responseFormat, setResponseFormat] = useState('text');
-  const [streaming, setStreaming] = useState(false);
-  const [contentFiltering, setContentFiltering] = useState(true);
-  const [caching, setCaching] = useState(true);
-
-  // UI state
-  const [testOutput, setTestOutput] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [isTesting, setIsTesting] = useState(false);
-  const [recentPrompts, setRecentPrompts] = useState<Prompt[]>([]);
-  const [loadingPrompts, setLoadingPrompts] = useState(true);
-
-  // Load recent prompts
-  useEffect(() => {
-    if (currentOrganization?.id) {
-      loadRecentPrompts();
-    }
-  }, [currentOrganization]);
-
-  const loadRecentPrompts = async () => {
-    try {
-      setLoadingPrompts(true);
-      const response = await fetch(`/api/prompts?organizationId=${currentOrganization?.id}`);
-      const data = await response.json();
-
-      if (response.ok) {
-        setRecentPrompts(data.prompts || []);
-      } else {
-        toast.error(data.error || 'Failed to load prompts');
-      }
-    } catch (error: any) {
-      toast.error('Failed to load prompts');
-    } finally {
-      setLoadingPrompts(false);
-    }
-  };
-
-  const addVariable = () => {
-    setVariables([...variables, { name: '', value: '', type: 'string', description: '', required: false }]);
-  };
-
-  const removeVariable = (index: number) => {
-    setVariables(variables.filter((_, i) => i !== index));
-  };
-
-  const updateVariable = (index: number, field: string, value: any) => {
-    const updated = [...variables];
-    updated[index] = { ...updated[index], [field]: value };
-    setVariables(updated);
-  };
-
-  const extractVariablesFromPrompt = () => {
-    const regex = /\{\{(\w+)\}\}/g;
-    const matches = Array.from(prompt.matchAll(regex));
-    const foundVars = new Set<string>();
-
-    for (const match of matches) {
-      foundVars.add(match[1]);
-    }
-
-    const newVariables: Variable[] = [];
-    foundVars.forEach(varName => {
-      const existing = variables.find(v => v.name === varName);
-      if (existing) {
-        newVariables.push(existing);
-      } else {
-        newVariables.push({
-          name: varName,
-          value: '',
-          type: 'string',
-          description: `Variable: ${varName}`,
-          required: true
-        });
-      }
-    });
-
-    setVariables(newVariables);
-    if (newVariables.length > foundVars.size - variables.length) {
-      toast.success(`Found ${newVariables.length} variables in prompt`);
-    }
-  };
-
-  const loadPrompt = async (promptToLoad: Prompt) => {
-    try {
-      setIsLoading(true);
-      setPromptId(promptToLoad.id);
-      setPromptName(promptToLoad.name);
-      setPromptDescription(promptToLoad.description || '');
-      setPrompt(promptToLoad.content);
-      setSelectedModel(promptToLoad.model);
-      setTemperature(promptToLoad.temperature);
-      setMaxTokens(promptToLoad.max_tokens);
-      setResponseFormat(promptToLoad.response_format || 'text');
-      setStreaming(promptToLoad.streaming || false);
-      setContentFiltering(promptToLoad.content_filtering ?? true);
-      setCaching(promptToLoad.caching ?? true);
-
-      // Load variables
-      const response = await fetch(`/api/prompts/${promptToLoad.id}/variables`);
-      const data = await response.json();
-
-      if (response.ok) {
-        setVariables(data.variables.map((v: any) => ({
-          id: v.id,
-          name: v.name,
-          value: '',
-          type: v.type,
-          description: v.description,
-          default_value: v.default_value,
-          required: v.required
-        })));
-      }
-
-      toast.success('Prompt loaded successfully');
-    } catch (error) {
-      toast.error('Failed to load prompt');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const savePrompt = async () => {
-    if (!currentOrganization?.id) {
-      toast.error('No organization selected');
-      return;
-    }
-
-    if (!promptName.trim()) {
-      toast.error('Please enter a prompt name');
-      return;
-    }
-
-    if (!prompt.trim()) {
-      toast.error('Please enter prompt content');
-      return;
-    }
-
-    try {
-      setIsSaving(true);
-
-      const promptData = {
-        organization_id: currentOrganization.id,
-        name: promptName,
-        description: promptDescription,
-        content: prompt,
-        model: selectedModel,
-        temperature,
-        max_tokens: maxTokens,
-        response_format: responseFormat,
-        streaming,
-        content_filtering: contentFiltering,
-        caching,
-        status: 'draft'
-      };
-
-      let response;
-      if (promptId) {
-        // Update existing
-        response = await fetch(`/api/prompts/${promptId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(promptData)
-        });
-      } else {
-        // Create new
-        response = await fetch('/api/prompts', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(promptData)
-        });
-      }
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to save prompt');
-      }
-
-      const savedPromptId = data.prompt.id;
-      setPromptId(savedPromptId);
-
-      // Save variables
-      if (variables.length > 0) {
-        const variablesResponse = await fetch(`/api/prompts/${savedPromptId}/variables`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ variables })
-        });
-
-        if (!variablesResponse.ok) {
-          const varsData = await variablesResponse.json();
-          throw new Error(varsData.error || 'Failed to save variables');
-        }
-      }
-
-      toast.success(promptId ? 'Prompt updated successfully!' : 'Prompt created successfully!');
-      loadRecentPrompts();
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to save prompt');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const testPrompt = async () => {
-    if (!prompt.trim()) {
-      toast.error('Please enter a prompt to test');
-      return;
-    }
-
-    try {
-      setIsTesting(true);
-      setTestOutput('');
-
-      // Replace variables in prompt
-      let processedPrompt = prompt;
-      variables.forEach(variable => {
-        if (variable.value) {
-          processedPrompt = processedPrompt.replace(
-            new RegExp(`\\{\\{${variable.name}\\}\\}`, 'g'),
-            variable.value
-          );
-        }
-      });
-
-      const response = await fetch('/api/llm/execute', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: processedPrompt,
-          model: selectedModel,
-          temperature,
-          max_tokens: maxTokens
-        })
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to execute prompt');
-      }
-
-      const output = `✅ Test Execution Successful\n\n` +
-                    `Response:\n${data.content}\n\n` +
-                    `--- Metrics ---\n` +
-                    `Model: ${data.model}\n` +
-                    `Tokens Used: ${data.tokens_used}\n` +
-                    `Cost: $${(data.cost_cents / 100).toFixed(4)}\n` +
-                    `Latency: ${data.latency_ms}ms`;
-
-      setTestOutput(output);
-      toast.success('Prompt executed successfully!');
-    } catch (error: any) {
-      const errorOutput = `❌ Test Execution Failed\n\n` +
-                         `Error: ${error.message}\n\n` +
-                         `Please check your prompt and try again.`;
-      setTestOutput(errorOutput);
-      toast.error(error.message || 'Failed to execute prompt');
-    } finally {
-      setIsTesting(false);
-    }
-  };
-
-  const newPrompt = () => {
-    setPromptId(null);
-    setPromptName('');
-    setPromptDescription('');
-    setPrompt('');
-    setVariables([]);
-    setTestOutput('');
-    setSelectedModel('gpt-4');
-    setTemperature(0.7);
-    setMaxTokens(150);
-    setResponseFormat('text');
-    toast.success('New prompt created');
-  };
 
   const promptTemplates = [
     {
       name: 'Content Generator',
       description: 'Generate engaging content from topics',
       prompt: 'Create engaging content about {{topic}}. Include key points, examples, and a compelling conclusion.',
-      variables: [{ name: 'topic', value: '', type: 'string', description: 'Content topic', required: true }],
+      variables: [{ name: 'topic', value: '', description: 'Content topic' }],
       category: 'Content',
       color: 'from-purple-500 to-pink-500'
     },
     {
       name: 'Sentiment Analyzer',
       description: 'Analyze text sentiment and emotions',
-      prompt: 'Analyze the sentiment of the following text and provide a detailed breakdown:\n\n{{text}}',
-      variables: [{ name: 'text', value: '', type: 'string', description: 'Text to analyze', required: true }],
+      prompt: 'Analyze the sentiment of the following text and provide a detailed breakdown: {{text}}',
+      variables: [{ name: 'text', value: '', description: 'Text to analyze' }],
       category: 'Analysis',
       color: 'from-blue-500 to-cyan-500'
     },
     {
       name: 'Code Reviewer',
       description: 'Review code for best practices',
-      prompt: 'Review the following {{language}} code and provide feedback on best practices, potential issues, and improvements:\n\n{{code}}',
+      prompt: 'Review the following {{language}} code and provide feedback on best practices, potential issues, and improvements: {{code}}',
       variables: [
-        { name: 'language', value: '', type: 'string', description: 'Programming language', required: true },
-        { name: 'code', value: '', type: 'string', description: 'Code to review', required: true }
+        { name: 'language', value: '', description: 'Programming language' },
+        { name: 'code', value: '', description: 'Code to review' }
       ],
       category: 'Development',
       color: 'from-green-500 to-emerald-500'
@@ -367,22 +55,55 @@ export default function PromptStudio() {
       description: 'Draft professional emails',
       prompt: 'Draft a professional email with the following requirements:\nSubject: {{subject}}\nRecipient: {{recipient}}\nContext: {{context}}\nTone: {{tone}}',
       variables: [
-        { name: 'subject', value: '', type: 'string', description: 'Email subject', required: true },
-        { name: 'recipient', value: '', type: 'string', description: 'Email recipient', required: true },
-        { name: 'context', value: '', type: 'string', description: 'Email context', required: true },
-        { name: 'tone', value: '', type: 'string', description: 'Email tone', required: true }
+        { name: 'subject', value: '', description: 'Email subject' },
+        { name: 'recipient', value: '', description: 'Email recipient' },
+        { name: 'context', value: '', description: 'Email context' },
+        { name: 'tone', value: '', description: 'Email tone' }
       ],
       category: 'Communication',
       color: 'from-orange-500 to-red-500'
     }
   ];
 
+  const recentPrompts = [
+    { name: 'Blog Post Generator', modified: '2 hours ago', status: 'deployed', category: 'Content' },
+    { name: 'Product Description Writer', modified: '1 day ago', status: 'draft', category: 'Marketing' },
+    { name: 'Social Media Caption Creator', modified: '3 days ago', status: 'testing', category: 'Social' },
+    { name: 'Email Subject Line Optimizer', modified: '1 week ago', status: 'deployed', category: 'Email' }
+  ];
+
+  const addVariable = () => {
+    setVariables([...variables, { name: '', value: '', description: '' }]);
+  };
+
+  const removeVariable = (index: number) => {
+    setVariables(variables.filter((_, i) => i !== index));
+  };
+
+  const updateVariable = (index: number, field: string, value: string) => {
+    const updated = [...variables];
+    updated[index] = { ...updated[index], [field]: value };
+    setVariables(updated);
+  };
+
   const loadTemplate = (template: any) => {
     setPrompt(template.prompt);
     setVariables(template.variables);
-    setPromptName(template.name);
-    setPromptDescription(template.description);
-    toast.success(`Template "${template.name}" loaded`);
+  };
+
+  const testPrompt = async () => {
+    setIsLoading(true);
+    // Simulate API call
+    setTimeout(() => {
+      let processedPrompt = prompt;
+      variables.forEach(variable => {
+        if (variable.value) {
+          processedPrompt = processedPrompt.replace(new RegExp(`{{${variable.name}}}`, 'g'), variable.value);
+        }
+      });
+      setTestOutput(`Test output for prompt:\n\n${processedPrompt}\n\nModel: ${selectedModel}\nTemperature: ${temperature}\nMax Tokens: ${maxTokens}\n\nThis would be the AI-generated response based on your prompt configuration.`);
+      setIsLoading(false);
+    }, 2000);
   };
 
   return (
@@ -411,22 +132,17 @@ export default function PromptStudio() {
               </div>
             </div>
             <div className="flex items-center space-x-3">
-              <Button variant="outline" size="sm" className="hidden sm:flex" onClick={newPrompt}>
-                <Plus className="w-4 h-4 mr-2" />
-                New Prompt
+              <Button variant="outline" size="sm" className="hidden sm:flex">
+                <History className="w-4 h-4 mr-2" />
+                Version History
               </Button>
-              <Button
-                size="sm"
-                className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 shadow-lg hover:shadow-xl transition-all duration-300"
-                onClick={savePrompt}
-                disabled={isSaving}
-              >
-                {isSaving ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <Save className="w-4 h-4 mr-2" />
-                )}
-                {isSaving ? 'Saving...' : 'Save Prompt'}
+              <Button variant="outline" size="sm" className="hidden sm:flex">
+                <Download className="w-4 h-4 mr-2" />
+                Export
+              </Button>
+              <Button size="sm" className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 shadow-lg hover:shadow-xl transition-all duration-300">
+                <Save className="w-4 h-4 mr-2" />
+                Save Prompt
               </Button>
             </div>
           </div>
@@ -473,31 +189,20 @@ export default function PromptStudio() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-4 space-y-3">
-                {loadingPrompts ? (
-                  <div className="text-center py-4">
-                    <Loader2 className="w-6 h-6 animate-spin mx-auto text-gray-400" />
-                  </div>
-                ) : recentPrompts.length === 0 ? (
-                  <p className="text-sm text-gray-500 text-center py-4">No prompts yet. Create your first one!</p>
-                ) : (
-                  recentPrompts.slice(0, 5).map((recentPrompt) => (
-                    <div
-                      key={recentPrompt.id}
-                      className="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors"
-                      onClick={() => loadPrompt(recentPrompt)}
-                    >
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 truncate">{recentPrompt.name}</p>
-                        <p className="text-xs text-gray-500">
-                          {new Date(recentPrompt.updated_at).toLocaleDateString()}
-                        </p>
+                {recentPrompts.map((prompt, index) => (
+                  <div key={index} className="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{prompt.name}</p>
+                      <div className="flex items-center space-x-2 mt-1">
+                        <p className="text-xs text-gray-500">{prompt.modified}</p>
+                        <Badge variant="outline" className="text-xs">{prompt.category}</Badge>
                       </div>
-                      <Badge variant={recentPrompt.status === 'deployed' ? 'default' : 'outline'} className="ml-2">
-                        {recentPrompt.status}
-                      </Badge>
                     </div>
-                  ))
-                )}
+                    <Badge variant={prompt.status === 'deployed' ? 'default' : prompt.status === 'testing' ? 'secondary' : 'outline'} className="ml-2">
+                      {prompt.status}
+                    </Badge>
+                  </div>
+                ))}
               </CardContent>
             </Card>
           </div>
@@ -525,33 +230,15 @@ export default function PromptStudio() {
                   </CardHeader>
                   <CardContent className="p-6 space-y-6">
                     <div>
-                      <Label htmlFor="prompt-name" className="text-sm font-medium">Prompt Name *</Label>
+                      <Label htmlFor="prompt-name" className="text-sm font-medium">Prompt Name</Label>
                       <Input
                         id="prompt-name"
                         placeholder="Enter a descriptive name for your prompt"
                         className="mt-2 border-gray-200 focus:border-purple-500 focus:ring-purple-500"
-                        value={promptName}
-                        onChange={(e) => setPromptName(e.target.value)}
                       />
                     </div>
                     <div>
-                      <Label htmlFor="prompt-description" className="text-sm font-medium">Description</Label>
-                      <Input
-                        id="prompt-description"
-                        placeholder="Brief description of what this prompt does"
-                        className="mt-2 border-gray-200 focus:border-purple-500 focus:ring-purple-500"
-                        value={promptDescription}
-                        onChange={(e) => setPromptDescription(e.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <Label htmlFor="prompt-text" className="text-sm font-medium">Prompt Text *</Label>
-                        <Button size="sm" variant="outline" onClick={extractVariablesFromPrompt}>
-                          <Sparkles className="w-3 h-3 mr-1" />
-                          Extract Variables
-                        </Button>
-                      </div>
+                      <Label htmlFor="prompt-text" className="text-sm font-medium">Prompt Text</Label>
                       <Textarea
                         id="prompt-text"
                         placeholder="Enter your prompt here. Use {{variable_name}} for dynamic content..."
@@ -563,6 +250,10 @@ export default function PromptStudio() {
                         <p className="text-xs text-gray-500">
                           {prompt.length} characters
                         </p>
+                        <Button size="sm" variant="outline" className="text-xs">
+                          <Code className="w-3 h-3 mr-1" />
+                          Format
+                        </Button>
                       </div>
                     </div>
                   </CardContent>
@@ -652,15 +343,15 @@ export default function PromptStudio() {
                       </div>
                       <Button
                         onClick={testPrompt}
-                        disabled={isTesting || !prompt}
+                        disabled={isLoading || !prompt}
                         className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 shadow-lg hover:shadow-xl transition-all duration-300"
                       >
-                        {isTesting ? (
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        {isLoading ? (
+                          <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
                         ) : (
                           <Play className="w-4 h-4 mr-2" />
                         )}
-                        {isTesting ? 'Testing...' : 'Run Test'}
+                        {isLoading ? 'Testing...' : 'Run Test'}
                       </Button>
                     </CardTitle>
                     <CardDescription>
@@ -675,8 +366,8 @@ export default function PromptStudio() {
                         <pre className="text-sm whitespace-pre-wrap font-mono">
                           {prompt ? (
                             variables.reduce((text, variable) => {
-                              return variable.value
-                                ? text.replace(new RegExp(`\\{\\{${variable.name}\\}\\}`, 'g'), `[${variable.value}]`)
+                              return variable.value 
+                                ? text.replace(new RegExp(`{{${variable.name}}}`, 'g'), `[${variable.value}]`)
                                 : text;
                             }, prompt)
                           ) : (
@@ -690,11 +381,11 @@ export default function PromptStudio() {
                     <div>
                       <Label className="text-sm font-medium">Test Output</Label>
                       <div className="mt-2 p-4 bg-gray-900 rounded-xl border min-h-[200px] relative overflow-hidden">
-                        {isTesting && (
+                        {isLoading && (
                           <div className="absolute inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center">
                             <div className="flex items-center space-x-2 text-green-400">
-                              <Loader2 className="w-5 h-5 animate-spin" />
-                              <span>Executing prompt...</span>
+                              <RefreshCw className="w-5 h-5 animate-spin" />
+                              <span>Generating response...</span>
                             </div>
                           </div>
                         )}
@@ -736,8 +427,9 @@ export default function PromptStudio() {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="gpt-4">GPT-4 (Recommended)</SelectItem>
-                            <SelectItem value="gpt-4-turbo">GPT-4 Turbo</SelectItem>
                             <SelectItem value="gpt-3.5-turbo">GPT-3.5 Turbo</SelectItem>
+                            <SelectItem value="claude-3">Claude-3</SelectItem>
+                            <SelectItem value="cohere-command">Cohere Command</SelectItem>
                           </SelectContent>
                         </Select>
                         <p className="text-xs text-gray-500 mt-1">
@@ -784,7 +476,7 @@ export default function PromptStudio() {
 
                       <div>
                         <Label className="text-sm font-medium">Response Format</Label>
-                        <Select value={responseFormat} onValueChange={setResponseFormat}>
+                        <Select defaultValue="text">
                           <SelectTrigger className="mt-2 border-gray-200">
                             <SelectValue />
                           </SelectTrigger>
@@ -806,7 +498,7 @@ export default function PromptStudio() {
                             <Label className="text-sm font-medium">Streaming Response</Label>
                             <p className="text-xs text-gray-500">Enable real-time response streaming</p>
                           </div>
-                          <Switch checked={streaming} onCheckedChange={setStreaming} />
+                          <Switch />
                         </div>
 
                         <div className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
@@ -814,7 +506,7 @@ export default function PromptStudio() {
                             <Label className="text-sm font-medium">Content Filtering</Label>
                             <p className="text-xs text-gray-500">Apply content safety filters</p>
                           </div>
-                          <Switch checked={contentFiltering} onCheckedChange={setContentFiltering} />
+                          <Switch defaultChecked />
                         </div>
 
                         <div className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
@@ -822,7 +514,15 @@ export default function PromptStudio() {
                             <Label className="text-sm font-medium">Caching</Label>
                             <p className="text-xs text-gray-500">Cache responses for improved performance</p>
                           </div>
-                          <Switch checked={caching} onCheckedChange={setCaching} />
+                          <Switch defaultChecked />
+                        </div>
+
+                        <div className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
+                          <div>
+                            <Label className="text-sm font-medium">Auto-save</Label>
+                            <p className="text-xs text-gray-500">Automatically save changes</p>
+                          </div>
+                          <Switch defaultChecked />
                         </div>
                       </div>
                     </div>
