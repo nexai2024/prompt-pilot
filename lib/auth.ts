@@ -52,28 +52,7 @@ export const auth = {
           console.error('Error creating profile:', profileError);
         }
 
-        // Create default organization for the user
-        const orgSlug = `${userData?.firstName?.toLowerCase() || 'user'}-${Date.now()}`;
-        const { data: orgData, error: orgError } = await supabase
-          .from('organizations')
-          .insert({
-            name: userData?.company || `${userData?.firstName}'s Organization`,
-            slug: orgSlug,
-            created_by: data.user.id,
-          })
-          .select()
-          .single();
-
-        if (!orgError && orgData) {
-          // Add user as owner of the organization
-          await supabase
-            .from('organization_members')
-            .insert({
-              organization_id: orgData.id,
-              user_id: data.user.id,
-              role: 'owner',
-            });
-        }
+        // Note: Default organization is created automatically by database trigger
       }
 
       return data;
