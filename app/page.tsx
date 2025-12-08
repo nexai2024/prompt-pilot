@@ -5,28 +5,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { 
-  Zap,
-  Code,
-  Rocket,
-  BarChart3,
-  Shield,
-  Globe,
-  ArrowRight,
-  Check,
-  Star,
-  Menu,
-  X,
-  Play,
-  Users,
-  Clock,
-  Lightbulb,
-  Target,
-  Workflow,
-  Database,
-  Settings,
-  TrendingUp
-} from 'lucide-react';
+import { Zap, Code, Rocket, ChartBar as BarChart3, Shield, Globe, ArrowRight, Check, Star, Menu, X, Play, Users, Clock, Lightbulb, Target, Workflow, Database, Settings, TrendingUp } from 'lucide-react';
 
 export default function LandingPage() {
   const [scrollY, setScrollY] = useState(0);
