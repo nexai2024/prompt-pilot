@@ -1,195 +1,180 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { 
+import {
   ArrowLeft,
   BarChart3,
-  TrendingUp,
-  TrendingDown,
   Activity,
-  Users,
-  DollarSign,
   Clock,
-  Globe,
+  TrendingUp,
+  DollarSign,
+  Zap,
   AlertCircle,
   CheckCircle,
-  Zap,
-  Download,
-  Calendar,
-  Filter
+  Globe,
+  Loader2,
+  RefreshCw
 } from 'lucide-react';
+import { useOrganization } from '@/lib/hooks/useOrganization';
+import { toast } from 'sonner';
+import {
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer
+} from 'recharts';
+
+interface AnalyticsData {
+  overview: {
+    totalCalls: number;
+    successfulCalls: number;
+    errorCalls: number;
+    successRate: number;
+    avgResponseTime: number;
+    totalTokens: number;
+    totalCost: number;
+    p50ResponseTime: number;
+    p95ResponseTime: number;
+    p99ResponseTime: number;
+  };
+  timeSeries: Array<{
+    time: string;
+    calls: number;
+    tokens: number;
+    cost: number;
+    avgResponseTime: number;
+  }>;
+  statusCodeData: Array<{
+    status: string;
+    count: number;
+    percentage: number;
+  }>;
+  regionData: Array<{
+    region: string;
+    count: number;
+    percentage: number;
+  }>;
+  recentErrors: Array<{
+    id: string;
+    path: string;
+    status_code: number;
+    error_message: string;
+    created_at: string;
+  }>;
+}
+
+const COLORS = ['#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#ec4899'];
 
 export default function Analytics() {
+  const { currentOrganization } = useOrganization();
   const [timeRange, setTimeRange] = useState('7d');
-  const [selectedAPI, setSelectedAPI] = useState('all');
+  const [data, setData] = useState<AnalyticsData | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const timeRanges = [
-    { value: '1d', label: 'Last 24 hours' },
-    { value: '7d', label: 'Last 7 days' },
-    { value: '30d', label: 'Last 30 days' },
-    { value: '90d', label: 'Last 90 days' }
-  ];
+  useEffect(() => {
+    if (currentOrganization?.id) {
+      loadAnalytics();
+    }
+  }, [currentOrganization, timeRange]);
 
-  const apis = [
-    { value: 'all', label: 'All APIs' },
-    { value: 'content-generator', label: 'Content Generator' },
-    { value: 'sentiment-analyzer', label: 'Sentiment Analyzer' },
-    { value: 'image-classifier', label: 'Image Classifier' },
-    { value: 'text-summarizer', label: 'Text Summarizer' }
-  ];
+  const loadAnalytics = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(
+        `/api/analytics?organizationId=${currentOrganization?.id}&timeRange=${timeRange}`
+      );
+      const result = await response.json();
 
-  const overviewStats = [
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to load analytics');
+      }
+
+      setData(result);
+    } catch (error: any) {
+      console.error('Error loading analytics:', error);
+      toast.error('Failed to load analytics data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 animate-spin mx-auto text-purple-600 mb-4" />
+          <p className="text-gray-600">Loading analytics...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const overview = data?.overview || {
+    totalCalls: 0,
+    successfulCalls: 0,
+    errorCalls: 0,
+    successRate: 0,
+    avgResponseTime: 0,
+    totalTokens: 0,
+    totalCost: 0,
+    p50ResponseTime: 0,
+    p95ResponseTime: 0,
+    p99ResponseTime: 0
+  };
+
+  const stats = [
     {
-      title: 'Total Requests',
-      value: '28,459',
-      change: '+12.5%',
-      trend: 'up',
+      title: 'Total API Calls',
+      value: overview.totalCalls.toLocaleString(),
+      change: `${overview.successRate.toFixed(1)}% success rate`,
       icon: Activity,
       color: 'text-blue-600',
-      bgColor: 'bg-blue-100'
-    },
-    {
-      title: 'Active Users',
-      value: '1,247',
-      change: '+8.2%',
-      trend: 'up',
-      icon: Users,
-      color: 'text-green-600',
-      bgColor: 'bg-green-100'
-    },
-    {
-      title: 'Revenue',
-      value: '$4,892',
-      change: '+15.3%',
-      trend: 'up',
-      icon: DollarSign,
-      color: 'text-purple-600',
-      bgColor: 'bg-purple-100'
+      bgColor: 'bg-blue-50'
     },
     {
       title: 'Avg Response Time',
-      value: '245ms',
-      change: '-5.8%',
-      trend: 'down',
+      value: `${overview.avgResponseTime}ms`,
+      change: `P95: ${overview.p95ResponseTime}ms`,
       icon: Clock,
+      color: 'text-green-600',
+      bgColor: 'bg-green-50'
+    },
+    {
+      title: 'Total Tokens',
+      value: overview.totalTokens.toLocaleString(),
+      change: `Across all calls`,
+      icon: Zap,
+      color: 'text-purple-600',
+      bgColor: 'bg-purple-50'
+    },
+    {
+      title: 'Total Cost',
+      value: `$${overview.totalCost.toFixed(2)}`,
+      change: `Average per call`,
+      icon: DollarSign,
       color: 'text-orange-600',
-      bgColor: 'bg-orange-100'
+      bgColor: 'bg-orange-50'
     }
   ];
-
-  const topAPIs = [
-    {
-      name: 'Content Generator',
-      requests: 12459,
-      revenue: '$2,348',
-      uptime: 99.9,
-      avgResponseTime: '230ms',
-      status: 'healthy'
-    },
-    {
-      name: 'Sentiment Analyzer',
-      requests: 8234,
-      revenue: '$1,567',
-      uptime: 99.8,
-      avgResponseTime: '180ms',
-      status: 'healthy'
-    },
-    {
-      name: 'Image Classifier',
-      requests: 5678,
-      revenue: '$789',
-      uptime: 99.5,
-      avgResponseTime: '420ms',
-      status: 'warning'
-    },
-    {
-      name: 'Text Summarizer',
-      requests: 2088,
-      revenue: '$188',
-      uptime: 98.2,
-      avgResponseTime: '310ms',
-      status: 'healthy'
-    }
-  ];
-
-  const recentAlerts = [
-    {
-      type: 'warning',
-      message: 'Image Classifier API response time increased by 25%',
-      time: '2 hours ago',
-      api: 'Image Classifier'
-    },
-    {
-      type: 'info',
-      message: 'Content Generator reached 10K requests milestone',
-      time: '4 hours ago',
-      api: 'Content Generator'
-    },
-    {
-      type: 'error',
-      message: 'Text Summarizer API had 3 failed requests',
-      time: '6 hours ago',
-      api: 'Text Summarizer'
-    },
-    {
-      type: 'success',
-      message: 'Sentiment Analyzer API uptime improved to 99.8%',
-      time: '8 hours ago',
-      api: 'Sentiment Analyzer'
-    }
-  ];
-
-  const usageByRegion = [
-    { region: 'North America', requests: 12459, percentage: 43.8 },
-    { region: 'Europe', requests: 8234, percentage: 28.9 },
-    { region: 'Asia Pacific', requests: 5678, percentage: 19.9 },
-    { region: 'South America', requests: 1567, percentage: 5.5 },
-    { region: 'Africa', requests: 521, percentage: 1.8 }
-  ];
-
-  const errorTypes = [
-    { type: '4xx Client Errors', count: 234, percentage: 45.2 },
-    { type: '5xx Server Errors', count: 156, percentage: 30.1 },
-    { type: 'Timeout Errors', count: 89, percentage: 17.2 },
-    { type: 'Rate Limit Exceeded', count: 39, percentage: 7.5 }
-  ];
-
-  const getAlertIcon = (type: string) => {
-    switch (type) {
-      case 'error':
-        return <AlertCircle className="w-4 h-4 text-red-600" />;
-      case 'warning':
-        return <AlertCircle className="w-4 h-4 text-yellow-600" />;
-      case 'success':
-        return <CheckCircle className="w-4 h-4 text-green-600" />;
-      default:
-        return <Activity className="w-4 h-4 text-blue-600" />;
-    }
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'healthy':
-        return 'bg-green-100 text-green-800';
-      case 'warning':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'error':
-        return 'bg-red-100 text-red-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
-  };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50">
       {/* Header */}
-      <div className="bg-white border-b">
+      <div className="bg-white border-b shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center space-x-4">
@@ -206,29 +191,20 @@ export default function Analytics() {
               </div>
             </div>
             <div className="flex items-center space-x-3">
-              <Select value={selectedAPI} onValueChange={setSelectedAPI}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {apis.map(api => (
-                    <SelectItem key={api.value} value={api.value}>{api.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
               <Select value={timeRange} onValueChange={setTimeRange}>
-                <SelectTrigger className="w-[150px]">
+                <SelectTrigger className="w-[140px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {timeRanges.map(range => (
-                    <SelectItem key={range.value} value={range.value}>{range.label}</SelectItem>
-                  ))}
+                  <SelectItem value="24h">Last 24 Hours</SelectItem>
+                  <SelectItem value="7d">Last 7 Days</SelectItem>
+                  <SelectItem value="30d">Last 30 Days</SelectItem>
+                  <SelectItem value="90d">Last 90 Days</SelectItem>
                 </SelectContent>
               </Select>
-              <Button variant="outline" size="sm">
-                <Download className="w-4 h-4 mr-2" />
-                Export
+              <Button size="sm" variant="outline" onClick={loadAnalytics}>
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Refresh
               </Button>
             </div>
           </div>
@@ -236,399 +212,195 @@ export default function Analytics() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Overview Stats */}
+        {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {overviewStats.map((stat, index) => (
-            <Card key={index}>
+          {stats.map((stat, index) => (
+            <Card key={index} className="border-0 shadow-lg">
               <CardContent className="p-6">
-                <div className="flex items-center">
-                  <div className={`flex-shrink-0 p-3 rounded-lg ${stat.bgColor}`}>
-                    <stat.icon className={`w-6 h-6 ${stat.color}`} />
-                  </div>
-                  <div className="ml-4 flex-1">
-                    <p className="text-sm font-medium text-gray-600">{stat.title}</p>
-                    <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
-                  </div>
+                <div className={`${stat.bgColor} rounded-xl p-4 mb-4`}>
+                  <stat.icon className={`w-8 h-8 ${stat.color}`} />
                 </div>
-                <div className="mt-4 flex items-center">
-                  {stat.trend === 'up' ? (
-                    <TrendingUp className="w-4 h-4 text-green-600 mr-1" />
-                  ) : (
-                    <TrendingDown className="w-4 h-4 text-red-600 mr-1" />
-                  )}
-                  <span className={`text-sm font-medium ${stat.trend === 'up' ? 'text-green-600' : 'text-red-600'}`}>
-                    {stat.change}
-                  </span>
-                  <span className="text-sm text-gray-500 ml-1">vs last period</span>
+                <div>
+                  <p className="text-sm font-medium text-gray-600 mb-1">{stat.title}</p>
+                  <p className="text-3xl font-bold text-gray-900 mb-1">{stat.value}</p>
+                  <p className="text-sm text-gray-500">{stat.change}</p>
                 </div>
               </CardContent>
             </Card>
           ))}
         </div>
 
-        <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="performance">Performance</TabsTrigger>
-            <TabsTrigger value="usage">Usage</TabsTrigger>
-            <TabsTrigger value="errors">Errors</TabsTrigger>
-            <TabsTrigger value="costs">Costs</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="overview" className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Top Performing APIs */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Top Performing APIs</CardTitle>
-                  <CardDescription>Your most active APIs in the selected time period</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {topAPIs.map((api, index) => (
-                      <div key={index} className="flex items-center justify-between p-4 border rounded-lg">
-                        <div className="flex items-center space-x-3">
-                          <div className="flex-shrink-0">
-                            <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-blue-500 rounded-lg flex items-center justify-center">
-                              <Zap className="w-5 h-5 text-white" />
-                            </div>
-                          </div>
-                          <div>
-                            <h4 className="font-medium text-gray-900">{api.name}</h4>
-                            <div className="flex items-center space-x-4 mt-1">
-                              <span className="text-sm text-gray-500">{api.requests.toLocaleString()} requests</span>
-                              <Badge className={getStatusColor(api.status)}>
-                                {api.status}
-                              </Badge>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-medium text-gray-900">{api.revenue}</p>
-                          <p className="text-sm text-gray-500">{api.uptime}% uptime</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Recent Alerts */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Recent Alerts</CardTitle>
-                  <CardDescription>Important notifications about your APIs</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {recentAlerts.map((alert, index) => (
-                      <div key={index} className="flex items-start space-x-3 p-3 border rounded-lg">
-                        <div className="flex-shrink-0 mt-0.5">
-                          {getAlertIcon(alert.type)}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm text-gray-900">{alert.message}</p>
-                          <div className="flex items-center space-x-2 mt-1">
-                            <span className="text-xs text-gray-500">{alert.time}</span>
-                            <span className="text-xs text-gray-300">•</span>
-                            <span className="text-xs text-gray-500">{alert.api}</span>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  <Button variant="outline" size="sm" className="w-full mt-4">
-                    View All Alerts
-                  </Button>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Usage by Region */}
-            <Card>
+        {/* Charts Grid */}
+        {overview.totalCalls > 0 ? (
+          <>
+            {/* Time Series Chart */}
+            <Card className="mb-8 shadow-lg border-0">
               <CardHeader>
-                <CardTitle>Usage by Region</CardTitle>
-                <CardDescription>Geographic distribution of your API requests</CardDescription>
+                <CardTitle>API Calls Over Time</CardTitle>
+                <CardDescription>Request volume and performance metrics</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {usageByRegion.map((region, index) => (
-                    <div key={index} className="flex items-center justify-between">
-                      <div className="flex items-center space-x-3">
-                        <Globe className="w-4 h-4 text-gray-400" />
-                        <span className="text-sm font-medium text-gray-900">{region.region}</span>
-                      </div>
-                      <div className="flex items-center space-x-4">
-                        <div className="w-32 bg-gray-200 rounded-full h-2">
-                          <div
-                            className="bg-gradient-to-r from-purple-600 to-blue-600 h-2 rounded-full"
-                            style={{ width: `${region.percentage}%` }}
-                          />
-                        </div>
-                        <span className="text-sm text-gray-600 w-16 text-right">
-                          {region.requests.toLocaleString()}
-                        </span>
-                        <span className="text-sm text-gray-500 w-12 text-right">
-                          {region.percentage}%
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={data?.timeSeries || []}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis dataKey="time" stroke="#888" />
+                    <YAxis stroke="#888" />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: 'white',
+                        border: '1px solid #e5e7eb',
+                        borderRadius: '8px'
+                      }}
+                    />
+                    <Legend />
+                    <Line
+                      type="monotone"
+                      dataKey="calls"
+                      stroke="#8b5cf6"
+                      strokeWidth={2}
+                      name="API Calls"
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="avgResponseTime"
+                      stroke="#3b82f6"
+                      strokeWidth={2}
+                      name="Avg Response Time (ms)"
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
               </CardContent>
             </Card>
-          </TabsContent>
 
-          <TabsContent value="performance" className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+              {/* Status Code Distribution */}
+              <Card className="shadow-lg border-0">
                 <CardHeader>
-                  <CardTitle>Response Time Trends</CardTitle>
-                  <CardDescription>Average response times over time</CardDescription>
+                  <CardTitle>Status Code Distribution</CardTitle>
+                  <CardDescription>Response status breakdown</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="h-64 flex items-center justify-center text-gray-500">
-                    <div className="text-center">
-                      <BarChart3 className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                      <p>Response time chart would be displayed here</p>
-                      <p className="text-sm">Integration with charting library needed</p>
-                    </div>
-                  </div>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <PieChart>
+                      <Pie
+                        data={data?.statusCodeData || []}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        label={({ status, percentage }) =>
+                          `${status}: ${percentage.toFixed(1)}%`
+                        }
+                        outerRadius={80}
+                        fill="#8884d8"
+                        dataKey="count"
+                      >
+                        {(data?.statusCodeData || []).map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
                 </CardContent>
               </Card>
 
-              <Card>
+              {/* Top Regions */}
+              <Card className="shadow-lg border-0">
                 <CardHeader>
-                  <CardTitle>Throughput Analysis</CardTitle>
-                  <CardDescription>Requests per minute over time</CardDescription>
+                  <CardTitle>Top Regions</CardTitle>
+                  <CardDescription>Geographic distribution of requests</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="h-64 flex items-center justify-center text-gray-500">
-                    <div className="text-center">
-                      <Activity className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                      <p>Throughput chart would be displayed here</p>
-                      <p className="text-sm">Integration with charting library needed</p>
-                    </div>
-                  </div>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <BarChart data={data?.regionData || []}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                      <XAxis dataKey="region" stroke="#888" />
+                      <YAxis stroke="#888" />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: 'white',
+                          border: '1px solid #e5e7eb',
+                          borderRadius: '8px'
+                        }}
+                      />
+                      <Bar dataKey="count" fill="#8b5cf6" radius={[8, 8, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
                 </CardContent>
               </Card>
             </div>
 
-            <Card>
+            {/* Token Usage & Cost */}
+            <Card className="mb-8 shadow-lg border-0">
               <CardHeader>
-                <CardTitle>Performance Metrics by API</CardTitle>
-                <CardDescription>Detailed performance breakdown for each API</CardDescription>
+                <CardTitle>Token Usage & Cost</CardTitle>
+                <CardDescription>Resource consumption over time</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b">
-                        <th className="text-left py-3 px-4 font-medium text-gray-900">API Name</th>
-                        <th className="text-left py-3 px-4 font-medium text-gray-900">Avg Response Time</th>
-                        <th className="text-left py-3 px-4 font-medium text-gray-900">P95 Response Time</th>
-                        <th className="text-left py-3 px-4 font-medium text-gray-900">Uptime</th>
-                        <th className="text-left py-3 px-4 font-medium text-gray-900">Error Rate</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {topAPIs.map((api, index) => (
-                        <tr key={index} className="border-b">
-                          <td className="py-3 px-4 text-gray-900">{api.name}</td>
-                          <td className="py-3 px-4 text-gray-600">{api.avgResponseTime}</td>
-                          <td className="py-3 px-4 text-gray-600">{parseInt(api.avgResponseTime) * 1.5}ms</td>
-                          <td className="py-3 px-4">
-                            <Badge className={api.uptime > 99 ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}>
-                              {api.uptime}%
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={data?.timeSeries || []}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis dataKey="time" stroke="#888" />
+                    <YAxis yAxisId="left" stroke="#888" />
+                    <YAxis yAxisId="right" orientation="right" stroke="#888" />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: 'white',
+                        border: '1px solid #e5e7eb',
+                        borderRadius: '8px'
+                      }}
+                    />
+                    <Legend />
+                    <Line
+                      yAxisId="left"
+                      type="monotone"
+                      dataKey="tokens"
+                      stroke="#10b981"
+                      strokeWidth={2}
+                      name="Tokens Used"
+                    />
+                    <Line
+                      yAxisId="right"
+                      type="monotone"
+                      dataKey="cost"
+                      stroke="#f59e0b"
+                      strokeWidth={2}
+                      name="Cost ($)"
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            {/* Recent Errors */}
+            {data?.recentErrors && data.recentErrors.length > 0 && (
+              <Card className="shadow-lg border-0">
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <AlertCircle className="w-5 h-5 mr-2 text-red-600" />
+                    Recent Errors
+                  </CardTitle>
+                  <CardDescription>Last 10 failed requests</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {data.recentErrors.map((error) => (
+                      <div
+                        key={error.id}
+                        className="flex items-center justify-between p-4 border border-red-100 rounded-lg bg-red-50"
+                      >
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-2 mb-1">
+                            <Badge variant="outline" className="bg-red-100 text-red-800">
+                              {error.status_code}
                             </Badge>
-                          </td>
-                          <td className="py-3 px-4 text-gray-600">0.{Math.floor(Math.random() * 9)}%</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="usage" className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Request Volume</CardTitle>
-                  <CardDescription>API requests over time</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="h-64 flex items-center justify-center text-gray-500">
-                    <div className="text-center">
-                      <BarChart3 className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                      <p>Request volume chart would be displayed here</p>
-                      <p className="text-sm">Integration with charting library needed</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>User Activity</CardTitle>
-                  <CardDescription>Active users and sessions</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="h-64 flex items-center justify-center text-gray-500">
-                    <div className="text-center">
-                      <Users className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                      <p>User activity chart would be displayed here</p>
-                      <p className="text-sm">Integration with charting library needed</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Top Endpoints</CardTitle>
-                <CardDescription>Most frequently accessed API endpoints</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {[
-                    { endpoint: '/api/generate-content', requests: 8234, method: 'POST' },
-                    { endpoint: '/api/analyze-sentiment', requests: 6789, method: 'POST' },
-                    { endpoint: '/api/classify-image', requests: 4567, method: 'POST' },
-                    { endpoint: '/api/summarize-text', requests: 3456, method: 'POST' },
-                    { endpoint: '/api/review-code', requests: 2345, method: 'POST' }
-                  ].map((endpoint, index) => (
-                    <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
-                      <div className="flex items-center space-x-3">
-                        <Badge variant="outline">{endpoint.method}</Badge>
-                        <code className="text-sm font-mono">{endpoint.endpoint}</code>
-                      </div>
-                      <div className="text-right">
-                        <span className="font-medium text-gray-900">{endpoint.requests.toLocaleString()}</span>
-                        <span className="text-sm text-gray-500 ml-2">requests</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="errors" className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Error Rate Trends</CardTitle>
-                  <CardDescription>Error rates over time</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="h-64 flex items-center justify-center text-gray-500">
-                    <div className="text-center">
-                      <AlertCircle className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                      <p>Error rate chart would be displayed here</p>
-                      <p className="text-sm">Integration with charting library needed</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Error Types Distribution</CardTitle>
-                  <CardDescription>Breakdown of error types</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {errorTypes.map((error, index) => (
-                      <div key={index} className="flex items-center justify-between">
-                        <span className="text-sm font-medium text-gray-900">{error.type}</span>
-                        <div className="flex items-center space-x-4">
-                          <div className="w-24 bg-gray-200 rounded-full h-2">
-                            <div
-                              className="bg-red-500 h-2 rounded-full"
-                              style={{ width: `${error.percentage}%` }}
-                            />
+                            <code className="text-sm text-gray-700">{error.path}</code>
                           </div>
-                          <span className="text-sm text-gray-600 w-12 text-right">{error.count}</span>
-                          <span className="text-sm text-gray-500 w-12 text-right">{error.percentage}%</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Recent Errors</CardTitle>
-                <CardDescription>Latest error occurrences across your APIs</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {[
-                    { api: 'Content Generator', error: '500 Internal Server Error', time: '2 minutes ago', count: 3 },
-                    { api: 'Image Classifier', error: '429 Rate Limit Exceeded', time: '15 minutes ago', count: 12 },
-                    { api: 'Sentiment Analyzer', error: '400 Bad Request', time: '1 hour ago', count: 5 },
-                    { api: 'Text Summarizer', error: '503 Service Unavailable', time: '2 hours ago', count: 2 }
-                  ].map((error, index) => (
-                    <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
-                      <div className="flex items-center space-x-3">
-                        <AlertCircle className="w-4 h-4 text-red-600" />
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">{error.api}</p>
-                          <p className="text-sm text-gray-600">{error.error}</p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm font-medium text-gray-900">{error.count} errors</p>
-                        <p className="text-sm text-gray-500">{error.time}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="costs" className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Cost Trends</CardTitle>
-                  <CardDescription>API usage costs over time</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="h-64 flex items-center justify-center text-gray-500">
-                    <div className="text-center">
-                      <DollarSign className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                      <p>Cost trends chart would be displayed here</p>
-                      <p className="text-sm">Integration with charting library needed</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Cost Breakdown</CardTitle>
-                  <CardDescription>Costs by API and resource type</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {topAPIs.map((api, index) => (
-                      <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
-                        <div>
-                          <p className="font-medium text-gray-900">{api.name}</p>
-                          <p className="text-sm text-gray-500">{api.requests.toLocaleString()} requests</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-medium text-gray-900">{api.revenue}</p>
-                          <p className="text-sm text-gray-500">
-                            ${(parseFloat(api.revenue.replace('$', '').replace(',', '')) * 0.3).toFixed(0)} costs
+                          {error.error_message && (
+                            <p className="text-sm text-red-700">{error.error_message}</p>
+                          )}
+                          <p className="text-xs text-gray-500 mt-1">
+                            {new Date(error.created_at).toLocaleString()}
                           </p>
                         </div>
                       </div>
@@ -636,35 +408,25 @@ export default function Analytics() {
                   </div>
                 </CardContent>
               </Card>
-            </div>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Resource Usage</CardTitle>
-                <CardDescription>Detailed breakdown of resource consumption</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-gray-900">2.4M</div>
-                    <div className="text-sm text-gray-500">AI Model Tokens</div>
-                    <div className="text-sm text-green-600">$1,234 cost</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-gray-900">156GB</div>
-                    <div className="text-sm text-gray-500">Bandwidth Used</div>
-                    <div className="text-sm text-green-600">$89 cost</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-gray-900">1,247</div>
-                    <div className="text-sm text-gray-500">Compute Hours</div>
-                    <div className="text-sm text-green-600">$567 cost</div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+            )}
+          </>
+        ) : (
+          <Card className="shadow-lg border-0">
+            <CardContent className="p-12 text-center">
+              <BarChart3 className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No data available</h3>
+              <p className="text-gray-500 mb-6">
+                Start making API calls to see analytics data here. Create and test prompts in the Prompt Studio.
+              </p>
+              <Button asChild>
+                <Link href="/prompt-studio">
+                  <Zap className="w-4 h-4 mr-2" />
+                  Create Your First Prompt
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   );

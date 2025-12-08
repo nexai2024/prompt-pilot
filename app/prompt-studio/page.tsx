@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ArrowLeft, Play, Save, Settings, Brain, Zap, Plus, Copy, Trash2, Edit, TestTube, Variable as Variables, History, Download, Upload, RefreshCw, Check, X, AlertTriangle, Sparkles, Code, Wand2, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useOrganization } from '@/lib/hooks/useOrganization';
+import { VersionHistory } from '@/components/prompt-studio/VersionHistory';
 
 interface Variable {
   id?: string;
@@ -250,6 +251,22 @@ export default function PromptStudio() {
           const varsData = await variablesResponse.json();
           throw new Error(varsData.error || 'Failed to save variables');
         }
+      }
+
+      // Create version snapshot
+      const versionResponse = await fetch(`/api/prompts/${savedPromptId}/versions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: prompt,
+          model: selectedModel,
+          temperature,
+          max_tokens: maxTokens
+        })
+      });
+
+      if (!versionResponse.ok) {
+        console.error('Failed to create version snapshot');
       }
 
       toast.success(promptId ? 'Prompt updated successfully!' : 'Prompt created successfully!');
@@ -506,10 +523,11 @@ export default function PromptStudio() {
           {/* Main Content */}
           <div className="lg:col-span-3">
             <Tabs defaultValue="editor" className="space-y-6">
-              <TabsList className="grid w-full grid-cols-3 bg-gray-100 p-1 rounded-xl">
+              <TabsList className="grid w-full grid-cols-4 bg-gray-100 p-1 rounded-xl">
                 <TabsTrigger value="editor" className="rounded-lg">Prompt Editor</TabsTrigger>
                 <TabsTrigger value="test" className="rounded-lg">Test & Debug</TabsTrigger>
                 <TabsTrigger value="settings" className="rounded-lg">Model Settings</TabsTrigger>
+                <TabsTrigger value="history" className="rounded-lg">Version History</TabsTrigger>
               </TabsList>
 
               <TabsContent value="editor" className="space-y-6">
@@ -841,6 +859,25 @@ export default function PromptStudio() {
                     </div>
                   </CardContent>
                 </Card>
+              </TabsContent>
+
+              <TabsContent value="history" className="space-y-6">
+                <VersionHistory
+                  promptId={promptId}
+                  currentVersion={{
+                    content: prompt,
+                    model: selectedModel,
+                    temperature,
+                    max_tokens: maxTokens,
+                  }}
+                  onRevert={(version) => {
+                    setPrompt(version.content);
+                    setSelectedModel(version.model);
+                    setTemperature(version.temperature);
+                    setMaxTokens(version.max_tokens);
+                    extractVariablesFromPrompt();
+                  }}
+                />
               </TabsContent>
             </Tabs>
           </div>
