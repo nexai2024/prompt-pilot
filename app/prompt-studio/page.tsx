@@ -289,7 +289,8 @@ export default function PromptStudio() {
           prompt: processedPrompt,
           model: selectedModel,
           temperature,
-          max_tokens: maxTokens
+          max_tokens: maxTokens,
+          organization_id: currentOrganization?.id
         })
       });
 
@@ -734,10 +735,22 @@ export default function PromptStudio() {
                           <SelectTrigger className="mt-2 border-gray-200">
                             <SelectValue placeholder="Select a model" />
                           </SelectTrigger>
-                          <SelectContent>
+                          <SelectContent className="max-h-[300px]">
+                            <div className="px-2 py-1.5 text-xs font-semibold text-gray-500">OpenAI</div>
                             <SelectItem value="gpt-4">GPT-4 (Recommended)</SelectItem>
                             <SelectItem value="gpt-4-turbo">GPT-4 Turbo</SelectItem>
                             <SelectItem value="gpt-3.5-turbo">GPT-3.5 Turbo</SelectItem>
+
+                            <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 mt-2">Anthropic Claude</div>
+                            <SelectItem value="claude-3-opus">Claude 3 Opus (Most Capable)</SelectItem>
+                            <SelectItem value="claude-3-sonnet">Claude 3 Sonnet (Balanced)</SelectItem>
+                            <SelectItem value="claude-3-haiku">Claude 3 Haiku (Fastest)</SelectItem>
+
+                            <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 mt-2">Cohere</div>
+                            <SelectItem value="command-r-plus">Command R+ (Most Capable)</SelectItem>
+                            <SelectItem value="command-r">Command R</SelectItem>
+                            <SelectItem value="command">Command</SelectItem>
+                            <SelectItem value="command-light">Command Light (Fastest)</SelectItem>
                           </SelectContent>
                         </Select>
                         <p className="text-xs text-gray-500 mt-1">

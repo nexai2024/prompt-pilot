@@ -2,18 +2,41 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import OpenAI from 'openai';
+import Anthropic from '@anthropic-ai/sdk';
+import { CohereClient } from 'cohere-ai';
+import { supabase } from '@/lib/supabase';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || '',
 });
 
-const MODEL_PRICING: Record<string, { input: number; output: number }> = {
-  'gpt-4': { input: 0.03, output: 0.06 },
-  'gpt-4-turbo': { input: 0.01, output: 0.03 },
-  'gpt-3.5-turbo': { input: 0.0005, output: 0.0015 },
-  'claude-3-opus': { input: 0.015, output: 0.075 },
-  'claude-3-sonnet': { input: 0.003, output: 0.015 },
-  'claude-3-haiku': { input: 0.00025, output: 0.00125 },
+const anthropic = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY || '',
+});
+
+const cohere = new CohereClient({
+  token: process.env.COHERE_API_KEY || '',
+});
+
+const MODEL_PRICING: Record<string, { input: number; output: number; provider: string }> = {
+  // OpenAI
+  'gpt-4': { input: 0.03, output: 0.06, provider: 'openai' },
+  'gpt-4-turbo': { input: 0.01, output: 0.03, provider: 'openai' },
+  'gpt-3.5-turbo': { input: 0.0005, output: 0.0015, provider: 'openai' },
+
+  // Anthropic Claude
+  'claude-3-opus-20240229': { input: 0.015, output: 0.075, provider: 'anthropic' },
+  'claude-3-sonnet-20240229': { input: 0.003, output: 0.015, provider: 'anthropic' },
+  'claude-3-haiku-20240307': { input: 0.00025, output: 0.00125, provider: 'anthropic' },
+  'claude-3-opus': { input: 0.015, output: 0.075, provider: 'anthropic' },
+  'claude-3-sonnet': { input: 0.003, output: 0.015, provider: 'anthropic' },
+  'claude-3-haiku': { input: 0.00025, output: 0.00125, provider: 'anthropic' },
+
+  // Cohere
+  'command': { input: 0.001, output: 0.002, provider: 'cohere' },
+  'command-light': { input: 0.0003, output: 0.0006, provider: 'cohere' },
+  'command-r': { input: 0.0005, output: 0.0015, provider: 'cohere' },
+  'command-r-plus': { input: 0.003, output: 0.015, provider: 'cohere' },
 };
 
 function calculateCost(model: string, inputTokens: number, outputTokens: number): number {
@@ -23,21 +46,103 @@ function calculateCost(model: string, inputTokens: number, outputTokens: number)
   return (inputCost + outputCost) * 100;
 }
 
+function getProvider(model: string): string {
+  const pricing = MODEL_PRICING[model];
+  return pricing?.provider || 'openai';
+}
+
+async function executeOpenAI(
+  prompt: string,
+  model: string,
+  temperature: number,
+  max_tokens: number,
+  top_p: number,
+  frequency_penalty: number,
+  presence_penalty: number,
+  stop_sequences?: string[]
+) {
+  const response = await openai.chat.completions.create({
+    model,
+    messages: [{ role: 'user', content: prompt }],
+    temperature,
+    max_tokens,
+    top_p,
+    frequency_penalty,
+    presence_penalty,
+    stop: stop_sequences && stop_sequences.length > 0 ? stop_sequences : undefined,
+  });
+
+  const usage = response.usage || { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+  return {
+    content: response.choices[0]?.message?.content || '',
+    usage: {
+      prompt_tokens: usage.prompt_tokens,
+      completion_tokens: usage.completion_tokens,
+      total_tokens: usage.total_tokens
+    }
+  };
+}
+
+async function executeAnthropic(
+  prompt: string,
+  model: string,
+  temperature: number,
+  max_tokens: number
+) {
+  const response = await anthropic.messages.create({
+    model,
+    max_tokens,
+    temperature,
+    messages: [{ role: 'user', content: prompt }],
+  });
+
+  const content = response.content[0];
+  const text = content.type === 'text' ? content.text : '';
+
+  return {
+    content: text,
+    usage: {
+      prompt_tokens: response.usage.input_tokens,
+      completion_tokens: response.usage.output_tokens,
+      total_tokens: response.usage.input_tokens + response.usage.output_tokens
+    }
+  };
+}
+
+async function executeCohere(
+  prompt: string,
+  model: string,
+  temperature: number,
+  max_tokens: number
+) {
+  const response = await cohere.chat({
+    model,
+    message: prompt,
+    temperature,
+    maxTokens: max_tokens,
+  });
+
+  // Estimate tokens (Cohere doesn't always return exact counts)
+  const estimatedPromptTokens = Math.ceil(prompt.length / 4);
+  const estimatedCompletionTokens = Math.ceil((response.text || '').length / 4);
+
+  return {
+    content: response.text || '',
+    usage: {
+      prompt_tokens: estimatedPromptTokens,
+      completion_tokens: estimatedCompletionTokens,
+      total_tokens: estimatedPromptTokens + estimatedCompletionTokens
+    }
+  };
+}
+
 export async function POST(req: NextRequest) {
   try {
     const supabase = createRouteHandlerClient({ cookies });
 
-    // Check authentication
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    if (!process.env.OPENAI_API_KEY) {
-      return NextResponse.json(
-        { error: 'OpenAI API key not configured on server' },
-        { status: 500 }
-      );
     }
 
     const body = await req.json();
@@ -56,54 +161,109 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Prompt is required' }, { status: 400 });
     }
 
+    const provider = getProvider(model);
     const startTime = Date.now();
 
-    const response = await openai.chat.completions.create({
-      model: model.includes('gpt') ? model : 'gpt-3.5-turbo',
-      messages: [{ role: 'user', content: prompt }],
-      temperature,
-      max_tokens,
-      top_p,
-      frequency_penalty,
-      presence_penalty,
-      stop: stop_sequences.length > 0 ? stop_sequences : undefined,
-    });
+    let result;
 
-    const latency_ms = Date.now() - startTime;
-    const usage = response.usage || { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
-    const cost_cents = calculateCost(model, usage.prompt_tokens, usage.completion_tokens);
-
-    return NextResponse.json({
-      content: response.choices[0]?.message?.content || '',
-      tokens_used: usage.total_tokens,
-      cost_cents,
-      latency_ms,
-      model,
-      usage: {
-        prompt_tokens: usage.prompt_tokens,
-        completion_tokens: usage.completion_tokens,
-        total_tokens: usage.total_tokens
-      }
-    });
-  } catch (error: any) {
-    console.error('LLM execution error:', error);
-
-    if (error.status === 401) {
+    // Check if required API key is configured
+    if (provider === 'openai' && !process.env.OPENAI_API_KEY) {
       return NextResponse.json(
-        { error: 'Invalid OpenAI API key' },
+        { error: 'OpenAI API key not configured on server' },
         { status: 500 }
       );
-    } else if (error.status === 429) {
+    } else if (provider === 'anthropic' && !process.env.ANTHROPIC_API_KEY) {
       return NextResponse.json(
-        { error: 'Rate limit exceeded. Please try again later.' },
-        { status: 429 }
+        { error: 'Anthropic API key not configured on server. Please configure ANTHROPIC_API_KEY.' },
+        { status: 500 }
       );
-    } else if (error.status === 500) {
+    } else if (provider === 'cohere' && !process.env.COHERE_API_KEY) {
       return NextResponse.json(
-        { error: 'OpenAI service error. Please try again later.' },
+        { error: 'Cohere API key not configured on server. Please configure COHERE_API_KEY.' },
         { status: 500 }
       );
     }
+
+    // Execute based on provider
+    try {
+      if (provider === 'openai') {
+        result = await executeOpenAI(
+          prompt,
+          model,
+          temperature,
+          max_tokens,
+          top_p,
+          frequency_penalty,
+          presence_penalty,
+          stop_sequences
+        );
+      } else if (provider === 'anthropic') {
+        result = await executeAnthropic(prompt, model, temperature, max_tokens);
+      } else if (provider === 'cohere') {
+        result = await executeCohere(prompt, model, temperature, max_tokens);
+      } else {
+        return NextResponse.json(
+          { error: `Unknown provider: ${provider}` },
+          { status: 400 }
+        );
+      }
+    } catch (providerError: any) {
+      console.error(`${provider} execution error:`, providerError);
+
+      // Handle provider-specific errors
+      if (providerError.status === 401 || providerError.statusCode === 401) {
+        return NextResponse.json(
+          { error: `Invalid ${provider} API key` },
+          { status: 500 }
+        );
+      } else if (providerError.status === 429 || providerError.statusCode === 429) {
+        return NextResponse.json(
+          { error: 'Rate limit exceeded. Please try again later.' },
+          { status: 429 }
+        );
+      }
+
+      throw providerError;
+    }
+
+    const latency_ms = Date.now() - startTime;
+    const cost_cents = calculateCost(
+      model,
+      result.usage.prompt_tokens,
+      result.usage.completion_tokens
+    );
+
+    // Log API call (non-blocking)
+    if (body.organization_id) {
+      supabase
+        .from('api_calls')
+        .insert([{
+          organization_id: body.organization_id,
+          method: 'POST',
+          path: '/api/llm/execute',
+          status_code: 200,
+          response_time_ms: latency_ms,
+          tokens_used: result.usage.total_tokens,
+          cost_cents,
+          user_agent: req.headers.get('user-agent') || undefined,
+          ip_address: req.headers.get('x-forwarded-for')?.split(',')[0] || req.headers.get('x-real-ip') || undefined
+        }])
+        .then(({ error }) => {
+          if (error) console.error('Failed to log API call:', error);
+        });
+    }
+
+    return NextResponse.json({
+      content: result.content,
+      tokens_used: result.usage.total_tokens,
+      cost_cents,
+      latency_ms,
+      model,
+      provider,
+      usage: result.usage
+    });
+  } catch (error: any) {
+    console.error('LLM execution error:', error);
 
     return NextResponse.json(
       { error: error.message || 'Failed to execute LLM request' },
