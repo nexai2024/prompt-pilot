@@ -10,6 +10,12 @@ export async function middleware(req: NextRequest) {
     data: { session },
   } = await supabase.auth.getSession();
 
+  console.log('[Middleware]', {
+    pathname: req.nextUrl.pathname,
+    hasSession: !!session,
+    userId: session?.user?.id,
+  });
+
   // Protected routes that require authentication
   const protectedPaths = [
     '/dashboard',
@@ -26,6 +32,7 @@ export async function middleware(req: NextRequest) {
 
   // Redirect to sign-in if accessing protected route without session
   if (isProtectedPath && !session) {
+    console.log('[Middleware] Redirecting to sign-in - no session found');
     const redirectUrl = req.nextUrl.clone();
     redirectUrl.pathname = '/auth/sign-in';
     redirectUrl.searchParams.set('redirectTo', req.nextUrl.pathname);
@@ -34,11 +41,13 @@ export async function middleware(req: NextRequest) {
 
   // Redirect to dashboard if accessing auth pages with active session
   if (req.nextUrl.pathname.startsWith('/auth/') && session) {
+    console.log('[Middleware] Redirecting to dashboard - already authenticated');
     const redirectUrl = req.nextUrl.clone();
     redirectUrl.pathname = '/dashboard';
     return NextResponse.redirect(redirectUrl);
   }
 
+  console.log('[Middleware] Allowing request to proceed');
   return res;
 }
 

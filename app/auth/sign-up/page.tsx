@@ -62,7 +62,12 @@ export default function SignUpPage() {
       const duration = Date.now() - startTime;
       console.log('Sign up successful! Duration:', duration, 'ms');
 
-      router.push('/dashboard');
+      // Wait a moment for auth state to update before redirecting
+      console.log('Waiting for auth state to update...');
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      console.log('Redirecting to dashboard...');
+      window.location.href = '/dashboard';
     } catch (err: any) {
       const duration = Date.now() - startTime;
       const errorMessage = err.message || 'Failed to create account. Please try again.';
