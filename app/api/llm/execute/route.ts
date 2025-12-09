@@ -4,7 +4,7 @@ import { cookies } from 'next/headers';
 import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
 import { CohereClient } from 'cohere-ai';
-import { supabase } from '@/lib/supabase';
+import type { Database } from '@/lib/supabase';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || '',
@@ -138,7 +138,7 @@ async function executeCohere(
 
 export async function POST(req: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient({ cookies });
+    const supabase = createRouteHandlerClient<Database>({ cookies });
 
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {

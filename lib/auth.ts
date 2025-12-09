@@ -1,5 +1,7 @@
-import { supabase } from './supabase';
+import { createBrowserClient } from './supabase-browser';
 import type { User } from '@supabase/supabase-js';
+
+const supabase = createBrowserClient();
 
 export interface AuthUser extends User {
   profile?: {

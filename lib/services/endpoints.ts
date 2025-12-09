@@ -1,4 +1,6 @@
-import { supabase } from '../supabase';
+import { createBrowserClient } from '../supabase-browser';
+
+const supabase = createBrowserClient();
 
 export interface ApiEndpoint {
   id: string;

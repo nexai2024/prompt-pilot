@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
+import { createBrowserClient } from '../supabase-browser';
 import { auth, type AuthUser } from '../auth';
 
 interface AuthContextType {
@@ -32,25 +33,39 @@ export function AuthProvider({ children }: AuthProviderProps) {
       return;
     }
 
-    // Get initial user
-    auth.getCurrentUser().then((user) => {
-      setUser(user);
-      setLoading(false);
-    }).catch((error) => {
-      console.error('Error getting current user:', error);
-      setLoading(false);
+    const supabase = createBrowserClient();
+
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        auth.getCurrentUser().then((user) => {
+          setUser(user);
+          setLoading(false);
+        }).catch((error) => {
+          console.error('Error getting current user:', error);
+          setLoading(false);
+        });
+      } else {
+        setUser(null);
+        setLoading(false);
+      }
     });
 
     // Listen for auth changes
-    const subscription = auth.onAuthStateChange((user) => {
-      setUser(user);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('[useAuth] Auth state changed:', event, !!session);
+
+      if (session?.user) {
+        const user = await auth.getCurrentUser();
+        setUser(user);
+      } else {
+        setUser(null);
+      }
       setLoading(false);
     });
 
     return () => {
-      if (subscription && typeof subscription.unsubscribe === 'function') {
-        subscription.unsubscribe();
-      }
+      subscription.unsubscribe();
     };
   }, []);
 

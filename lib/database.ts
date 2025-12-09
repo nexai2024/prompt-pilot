@@ -1,4 +1,6 @@
-import { supabase } from './supabase';
+import { createBrowserClient } from './supabase-browser';
+
+const supabase = createBrowserClient();
 import type { Database } from './supabase';
 
 type Tables = Database['public']['Tables'];

@@ -2,7 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from './useAuth';
-import { supabase } from '../supabase';
+import { createBrowserClient } from '../supabase-browser';
+
+const supabase = createBrowserClient();
 
 export function useOrganization() {
   const { user } = useAuth();

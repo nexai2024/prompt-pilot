@@ -1,8 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { supabase } from '../supabase';
+import { createBrowserClient } from '../supabase-browser';
 import { RealtimeChannel } from '@supabase/supabase-js';
+
+const supabase = createBrowserClient();
 
 export function useRealtimeSubscription<T>(
   table: string,
