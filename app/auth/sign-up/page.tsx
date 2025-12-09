@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Zap, Mail, Lock, User, Building, AlertCircle } from 'lucide-react';
+import { Zap, Mail, Lock, User, Building, AlertCircle, Info } from 'lucide-react';
 
 export default function SignUpPage() {
   const router = useRouter();
@@ -24,6 +24,8 @@ export default function SignUpPage() {
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [debugInfo, setDebugInfo] = useState<any>(null);
+  const [showDebug, setShowDebug] = useState(false);
 
   const handleChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -44,16 +46,46 @@ export default function SignUpPage() {
     }
 
     setLoading(true);
+    const startTime = Date.now();
 
     try {
+      console.log('=== SIGN UP ATTEMPT ===');
+      console.log('Email:', formData.email);
+      console.log('Time:', new Date().toISOString());
+
       await signUp(formData.email, formData.password, {
         firstName: formData.firstName,
         lastName: formData.lastName,
         company: formData.company
       });
+
+      const duration = Date.now() - startTime;
+      console.log('Sign up successful! Duration:', duration, 'ms');
+
       router.push('/dashboard');
     } catch (err: any) {
-      setError(err.message || 'Failed to create account. Please try again.');
+      const duration = Date.now() - startTime;
+      const errorMessage = err.message || 'Failed to create account. Please try again.';
+
+      console.error('=== SIGN UP FAILED ===');
+      console.error('Error:', err);
+      console.error('Message:', errorMessage);
+      console.error('Duration:', duration, 'ms');
+
+      setDebugInfo({
+        lastAttempt: new Date().toISOString(),
+        success: false,
+        error: errorMessage,
+        errorDetails: {
+          message: err.message,
+          name: err.name,
+          status: err.status,
+        },
+        duration,
+      });
+
+      setError(errorMessage);
+      setShowDebug(true);
     } finally {
       setLoading(false);
     }
@@ -81,6 +113,32 @@ export default function SignUpPage() {
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              )}
+
+              {showDebug && debugInfo && (
+                <Alert>
+                  <Info className="h-4 w-4" />
+                  <AlertDescription>
+                    <div className="space-y-1 text-xs font-mono">
+                      <div className="font-bold mb-2">Debug Information:</div>
+                      {debugInfo.lastAttempt && (
+                        <>
+                          <div>Last Attempt: {new Date(debugInfo.lastAttempt).toLocaleTimeString()}</div>
+                          <div>Duration: {debugInfo.duration}ms</div>
+                          {debugInfo.errorDetails && (
+                            <>
+                              <div className="mt-2 font-bold">Error Details:</div>
+                              <div>Name: {debugInfo.errorDetails.name || 'Unknown'}</div>
+                              <div>Status: {debugInfo.errorDetails.status || 'N/A'}</div>
+                              <div className="break-all">Message: {debugInfo.errorDetails.message}</div>
+                            </>
+                          )}
+                        </>
+                      )}
+                      <div className="mt-2 text-blue-600">Check browser console for full logs</div>
+                    </div>
+                  </AlertDescription>
                 </Alert>
               )}
 

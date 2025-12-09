@@ -22,6 +22,8 @@ export const auth = {
     company?: string;
   }) {
     try {
+      console.log('Attempting sign up for:', email);
+
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -34,10 +36,26 @@ export const auth = {
         }
       });
 
-      if (error) throw error;
+      console.log('Sign up response:', {
+        hasData: !!data,
+        hasUser: !!data?.user,
+        hasSession: !!data?.session,
+        error: error ? {
+          message: error.message,
+          status: error.status,
+          name: error.name
+        } : null
+      });
+
+      if (error) {
+        const errorMessage = this.getReadableErrorMessage(error);
+        throw new Error(errorMessage);
+      }
 
       // Create profile record
       if (data.user) {
+        console.log('Creating profile for user:', data.user.id);
+
         const { error: profileError } = await supabase
           .from('profiles')
           .insert({
@@ -50,14 +68,20 @@ export const auth = {
 
         if (profileError) {
           console.error('Error creating profile:', profileError);
+          // Don't throw here, profile might already exist from trigger
         }
 
         // Note: Default organization is created automatically by database trigger
       }
 
       return data;
-    } catch (error) {
-      console.error('Sign up error:', error);
+    } catch (error: any) {
+      console.error('Sign up error details:', {
+        message: error?.message,
+        status: error?.status,
+        name: error?.name,
+        error: error
+      });
       throw error;
     }
   },
@@ -65,17 +89,79 @@ export const auth = {
   // Sign in with email and password
   async signIn(email: string, password: string) {
     try {
+      console.log('Attempting sign in for:', email);
+
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      if (error) throw error;
+      console.log('Sign in response:', {
+        hasData: !!data,
+        hasUser: !!data?.user,
+        hasSession: !!data?.session,
+        error: error ? {
+          message: error.message,
+          status: error.status,
+          name: error.name
+        } : null
+      });
+
+      if (error) {
+        const errorMessage = this.getReadableErrorMessage(error);
+        throw new Error(errorMessage);
+      }
+
+      if (!data.user || !data.session) {
+        throw new Error('Sign in failed - no user session created');
+      }
+
       return data;
-    } catch (error) {
-      console.error('Sign in error:', error);
+    } catch (error: any) {
+      console.error('Sign in error details:', {
+        message: error?.message,
+        status: error?.status,
+        name: error?.name,
+        error: error
+      });
       throw error;
     }
+  },
+
+  // Helper to get readable error messages
+  getReadableErrorMessage(error: any): string {
+    if (!error) return 'An unknown error occurred';
+
+    const message = error.message || error.msg || '';
+
+    // Map common Supabase errors to user-friendly messages
+    if (message.includes('Invalid login credentials')) {
+      return 'Invalid email or password. Please check your credentials and try again.';
+    }
+    if (message.includes('Email not confirmed')) {
+      return 'Please confirm your email address before signing in.';
+    }
+    if (message.includes('User not found')) {
+      return 'No account found with this email address.';
+    }
+    if (message.includes('Invalid email')) {
+      return 'Please enter a valid email address.';
+    }
+    if (message.includes('Password should be at least')) {
+      return 'Password must be at least 6 characters long.';
+    }
+    if (error.status === 400) {
+      return 'Invalid request. Please check your email and password.';
+    }
+    if (error.status === 429) {
+      return 'Too many attempts. Please wait a moment and try again.';
+    }
+    if (error.status === 500) {
+      return 'Server error. Please try again later.';
+    }
+
+    // Return the original message if no mapping found
+    return message || 'Sign in failed. Please try again.';
   },
 
   // Sign out

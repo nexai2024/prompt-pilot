@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/hooks/useAuth';
@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Zap, Mail, Lock, AlertCircle } from 'lucide-react';
+import { Zap, Mail, Lock, AlertCircle, Info } from 'lucide-react';
 
 export default function SignInPage() {
   const router = useRouter();
@@ -18,17 +18,76 @@ export default function SignInPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [debugInfo, setDebugInfo] = useState<any>(null);
+  const [showDebug, setShowDebug] = useState(false);
+
+  useEffect(() => {
+    // Check Supabase configuration on mount
+    const checkConfig = () => {
+      const hasUrl = !!process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const hasKey = !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+      setDebugInfo({
+        timestamp: new Date().toISOString(),
+        supabaseConfigured: hasUrl && hasKey,
+        hasUrl,
+        hasKey,
+      });
+    };
+
+    checkConfig();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
+    const startTime = Date.now();
+
     try {
+      console.log('=== SIGN IN ATTEMPT ===');
+      console.log('Email:', email);
+      console.log('Time:', new Date().toISOString());
+
       await signIn(email, password);
+
+      const duration = Date.now() - startTime;
+      console.log('Sign in successful! Duration:', duration, 'ms');
+
+      setDebugInfo({
+        ...debugInfo,
+        lastAttempt: new Date().toISOString(),
+        success: true,
+        duration,
+      });
+
       router.push('/dashboard');
     } catch (err: any) {
-      setError(err.message || 'Failed to sign in. Please check your credentials.');
+      const duration = Date.now() - startTime;
+      const errorMessage = err.message || 'Failed to sign in. Please check your credentials.';
+
+      console.error('=== SIGN IN FAILED ===');
+      console.error('Error:', err);
+      console.error('Message:', errorMessage);
+      console.error('Duration:', duration, 'ms');
+
+      setDebugInfo({
+        ...debugInfo,
+        lastAttempt: new Date().toISOString(),
+        success: false,
+        error: errorMessage,
+        errorDetails: {
+          message: err.message,
+          name: err.name,
+          status: err.status,
+          stack: err.stack?.split('\n').slice(0, 3),
+        },
+        duration,
+      });
+
+      setError(errorMessage);
+      setShowDebug(true);
     } finally {
       setLoading(false);
     }
@@ -56,6 +115,33 @@ export default function SignInPage() {
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              )}
+
+              {showDebug && debugInfo && (
+                <Alert>
+                  <Info className="h-4 w-4" />
+                  <AlertDescription>
+                    <div className="space-y-1 text-xs font-mono">
+                      <div className="font-bold mb-2">Debug Information:</div>
+                      <div>Supabase Configured: {debugInfo.supabaseConfigured ? '✓ Yes' : '✗ No'}</div>
+                      {debugInfo.lastAttempt && (
+                        <>
+                          <div>Last Attempt: {new Date(debugInfo.lastAttempt).toLocaleTimeString()}</div>
+                          <div>Duration: {debugInfo.duration}ms</div>
+                          {debugInfo.errorDetails && (
+                            <>
+                              <div className="mt-2 font-bold">Error Details:</div>
+                              <div>Name: {debugInfo.errorDetails.name || 'Unknown'}</div>
+                              <div>Status: {debugInfo.errorDetails.status || 'N/A'}</div>
+                              <div className="break-all">Message: {debugInfo.errorDetails.message}</div>
+                            </>
+                          )}
+                        </>
+                      )}
+                      <div className="mt-2 text-blue-600">Check browser console for full logs</div>
+                    </div>
+                  </AlertDescription>
                 </Alert>
               )}
 

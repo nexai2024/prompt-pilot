@@ -4,15 +4,36 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
+console.log('Supabase Configuration:', {
+  hasUrl: !!supabaseUrl,
+  hasKey: !!supabaseAnonKey,
+  url: supabaseUrl ? `${supabaseUrl.substring(0, 30)}...` : 'NOT SET',
+  keyPrefix: supabaseAnonKey ? `${supabaseAnonKey.substring(0, 20)}...` : 'NOT SET'
+});
+
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn('Supabase environment variables are not set. Please check your .env.local file.');
+  console.error('CRITICAL: Supabase environment variables are not set!');
+  console.error('Please check your .env file and ensure these variables are set:');
+  console.error('- NEXT_PUBLIC_SUPABASE_URL');
+  console.error('- NEXT_PUBLIC_SUPABASE_ANON_KEY');
+  throw new Error('Missing Supabase configuration. Check console for details.');
 }
 
-// Create a fallback client for development
+// Create the Supabase client
 export const supabase = createClient(
-  supabaseUrl || 'https://placeholder.supabase.co',
-  supabaseAnonKey || 'placeholder-key'
+  supabaseUrl,
+  supabaseAnonKey,
+  {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+      storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+    },
+  }
 );
+
+console.log('Supabase client initialized successfully');
 
 // Database types
 export interface Database {
