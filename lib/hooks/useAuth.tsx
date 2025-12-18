@@ -7,12 +7,12 @@ import { auth, type AuthUser } from '../auth';
 interface AuthContextType {
   user: AuthUser | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<void>;
+  signIn: (email: string, password: string) => Promise<any>;
   signUp: (email: string, password: string, userData?: {
     firstName?: string;
     lastName?: string;
     company?: string;
-  }) => Promise<void>;
+  }) => Promise<any>;
   signOut: () => Promise<void>;
   updateProfile: (updates: any) => Promise<void>;
 }
@@ -72,8 +72,23 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const signIn = async (email: string, password: string) => {
     setLoading(true);
     try {
-      await auth.signIn(email, password);
+      console.log('[useAuth] Starting sign in...');
+      const result = await auth.signIn(email, password);
+      console.log('[useAuth] Sign in successful, getting user data...');
+
+      // Wait a moment for the session to be fully set
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      const user = await auth.getCurrentUser();
+      console.log('[useAuth] User data retrieved:', { hasUser: !!user, userId: user?.id });
+
+      setUser(user);
+      setLoading(false);
+
+      console.log('[useAuth] Sign in complete');
+      return result;
     } catch (error) {
+      console.error('[useAuth] Sign in error:', error);
       setLoading(false);
       throw error;
     }
@@ -86,8 +101,23 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }) => {
     setLoading(true);
     try {
-      await auth.signUp(email, password, userData);
+      console.log('[useAuth] Starting sign up...');
+      const result = await auth.signUp(email, password, userData);
+      console.log('[useAuth] Sign up successful, getting user data...');
+
+      // Wait a moment for the session to be fully set
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      const user = await auth.getCurrentUser();
+      console.log('[useAuth] User data retrieved:', { hasUser: !!user, userId: user?.id });
+
+      setUser(user);
+      setLoading(false);
+
+      console.log('[useAuth] Sign up complete');
+      return result;
     } catch (error) {
+      console.error('[useAuth] Sign up error:', error);
       setLoading(false);
       throw error;
     }

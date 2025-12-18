@@ -50,10 +50,11 @@ export default function SignInPage() {
       console.log('Email:', email);
       console.log('Time:', new Date().toISOString());
 
-      await signIn(email, password);
+      const result = await signIn(email, password);
 
       const duration = Date.now() - startTime;
       console.log('Sign in successful! Duration:', duration, 'ms');
+      console.log('Sign in result:', result);
 
       setDebugInfo({
         ...debugInfo,
@@ -63,6 +64,10 @@ export default function SignInPage() {
       });
 
       console.log('Redirecting to dashboard...');
+
+      // Use a small delay to ensure session is fully set
+      await new Promise(resolve => setTimeout(resolve, 200));
+
       router.push('/dashboard');
     } catch (err: any) {
       const duration = Date.now() - startTime;
