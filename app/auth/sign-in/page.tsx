@@ -65,10 +65,8 @@ export default function SignInPage() {
 
       console.log('Redirecting to dashboard...');
 
-      // Use a small delay to ensure session is fully set
-      await new Promise(resolve => setTimeout(resolve, 200));
-
-      router.push('/dashboard');
+      // Use window.location for a full page reload to ensure session cookies are set
+      window.location.href = '/dashboard';
     } catch (err: any) {
       const duration = Date.now() - startTime;
       const errorMessage = err.message || 'Failed to sign in. Please check your credentials.';

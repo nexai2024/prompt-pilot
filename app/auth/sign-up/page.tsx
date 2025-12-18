@@ -63,7 +63,8 @@ export default function SignUpPage() {
       console.log('Sign up successful! Duration:', duration, 'ms');
 
       console.log('Redirecting to dashboard...');
-      router.push('/dashboard');
+      // Use window.location for a full page reload to ensure session cookies are set
+      window.location.href = '/dashboard';
     } catch (err: any) {
       const duration = Date.now() - startTime;
       const errorMessage = err.message || 'Failed to create account. Please try again.';
