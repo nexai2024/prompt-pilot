@@ -25,7 +25,6 @@ import {
   Loader2,
   AlertCircle
 } from 'lucide-react';
-import { useOrganization } from '@/lib/hooks/useOrganization';
 import { toast } from 'sonner';
 
 interface DashboardStats {
@@ -55,20 +54,18 @@ interface DashboardStats {
 }
 
 export default function Dashboard() {
-  const { currentOrganization, loading: orgLoading } = useOrganization();
+  const orgLoading = false;
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (currentOrganization?.id) {
-      loadDashboardStats();
-    }
-  }, [currentOrganization]);
+    loadDashboardStats();
+  }, []);
 
   const loadDashboardStats = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/dashboard/stats?organizationId=${currentOrganization?.id}`);
+      const response = await fetch(`/api/dashboard/stats`);
       const data = await response.json();
 
       if (!response.ok) {
@@ -130,16 +127,6 @@ export default function Dashboard() {
     );
   }
 
-  if (!currentOrganization) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <AlertCircle className="w-12 h-12 mx-auto text-red-600 mb-4" />
-          <p className="text-gray-600">No organization found. Please contact support.</p>
-        </div>
-      </div>
-    );
-  }
 
   const mainStats = [
     {
@@ -192,7 +179,7 @@ export default function Dashboard() {
               </div>
               <div>
                 <h1 className="text-xl font-bold text-gray-900">Dashboard</h1>
-                <p className="text-sm text-gray-500">{currentOrganization.name}</p>
+                <p className="text-sm text-gray-500">Prompt Pilot</p>
               </div>
             </div>
             <div className="flex items-center space-x-3">

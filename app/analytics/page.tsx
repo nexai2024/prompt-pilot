@@ -22,7 +22,6 @@ import {
   Loader2,
   RefreshCw
 } from 'lucide-react';
-import { useOrganization } from '@/lib/hooks/useOrganization';
 import { toast } from 'sonner';
 import {
   LineChart,
@@ -82,22 +81,19 @@ interface AnalyticsData {
 const COLORS = ['#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#ec4899'];
 
 export default function Analytics() {
-  const { currentOrganization } = useOrganization();
   const [timeRange, setTimeRange] = useState('7d');
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (currentOrganization?.id) {
-      loadAnalytics();
-    }
-  }, [currentOrganization, timeRange]);
+    loadAnalytics();
+  }, [timeRange]);
 
   const loadAnalytics = async () => {
     try {
       setLoading(true);
       const response = await fetch(
-        `/api/analytics?organizationId=${currentOrganization?.id}&timeRange=${timeRange}`
+        `/api/analytics?timeRange=${timeRange}`
       );
       const result = await response.json();
 

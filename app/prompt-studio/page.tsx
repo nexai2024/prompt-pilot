@@ -13,7 +13,6 @@ import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ArrowLeft, Play, Save, Settings, Brain, Zap, Plus, Copy, Trash2, Edit, TestTube, Variable as Variables, History, Download, Upload, RefreshCw, Check, X, AlertTriangle, Sparkles, Code, Wand2, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { useOrganization } from '@/lib/hooks/useOrganization';
 import { VersionHistory } from '@/components/prompt-studio/VersionHistory';
 
 interface Variable {
@@ -44,8 +43,6 @@ interface Prompt {
 }
 
 export default function PromptStudio() {
-  const { currentOrganization } = useOrganization();
-
   // Prompt state
   const [promptId, setPromptId] = useState<string | null>(null);
   const [promptName, setPromptName] = useState('');
@@ -72,15 +69,13 @@ export default function PromptStudio() {
 
   // Load recent prompts
   useEffect(() => {
-    if (currentOrganization?.id) {
-      loadRecentPrompts();
-    }
-  }, [currentOrganization]);
+    loadRecentPrompts();
+  }, []);
 
   const loadRecentPrompts = async () => {
     try {
       setLoadingPrompts(true);
-      const response = await fetch(`/api/prompts?organizationId=${currentOrganization?.id}`);
+      const response = await fetch(`/api/prompts`);
       const data = await response.json();
 
       if (response.ok) {
@@ -180,11 +175,6 @@ export default function PromptStudio() {
   };
 
   const savePrompt = async () => {
-    if (!currentOrganization?.id) {
-      toast.error('No organization selected');
-      return;
-    }
-
     if (!promptName.trim()) {
       toast.error('Please enter a prompt name');
       return;
@@ -199,7 +189,6 @@ export default function PromptStudio() {
       setIsSaving(true);
 
       const promptData = {
-        organization_id: currentOrganization.id,
         name: promptName,
         description: promptDescription,
         content: prompt,
@@ -306,8 +295,7 @@ export default function PromptStudio() {
           prompt: processedPrompt,
           model: selectedModel,
           temperature,
-          max_tokens: maxTokens,
-          organization_id: currentOrganization?.id
+          max_tokens: maxTokens
         })
       });
 

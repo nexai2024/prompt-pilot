@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
 import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
 import { CohereClient } from 'cohere-ai';
-import type { Database } from '@/lib/supabase';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || '',
@@ -138,13 +135,6 @@ async function executeCohere(
 
 export async function POST(req: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient<Database>({ cookies });
-
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
     const body = await req.json();
     const {
       prompt,
@@ -233,25 +223,7 @@ export async function POST(req: NextRequest) {
       result.usage.completion_tokens
     );
 
-    // Log API call (non-blocking)
-    if (body.organization_id) {
-      supabase
-        .from('api_calls')
-        .insert([{
-          organization_id: body.organization_id,
-          method: 'POST',
-          path: '/api/llm/execute',
-          status_code: 200,
-          response_time_ms: latency_ms,
-          tokens_used: result.usage.total_tokens,
-          cost_cents,
-          user_agent: req.headers.get('user-agent') || undefined,
-          ip_address: req.headers.get('x-forwarded-for')?.split(',')[0] || req.headers.get('x-real-ip') || undefined
-        }])
-        .then(({ error }) => {
-          if (error) console.error('Failed to log API call:', error);
-        });
-    }
+    // Log API call (disabled - no auth/database)
 
     return NextResponse.json({
       content: result.content,
