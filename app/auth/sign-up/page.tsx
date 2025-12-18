@@ -53,7 +53,7 @@ export default function SignUpPage() {
       console.log('Email:', formData.email);
       console.log('Time:', new Date().toISOString());
 
-      await signUp(formData.email, formData.password, {
+      const result = await signUp(formData.email, formData.password, {
         firstName: formData.firstName,
         lastName: formData.lastName,
         company: formData.company
@@ -62,8 +62,29 @@ export default function SignUpPage() {
       const duration = Date.now() - startTime;
       console.log('Sign up successful! Duration:', duration, 'ms');
 
+      console.log('Setting session cookies via API...');
+
+      // Call the auth callback API to set session cookies for server-side use
+      if (result?.session) {
+        try {
+          await fetch('/api/auth/callback', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              access_token: result.session.access_token,
+              refresh_token: result.session.refresh_token,
+            }),
+          });
+          console.log('Session cookies set successfully');
+        } catch (callbackError) {
+          console.error('Error setting session cookies:', callbackError);
+        }
+      }
+
       console.log('Redirecting to dashboard...');
-      // Use window.location for a full page reload to ensure session cookies are set
+      // Use window.location for a full page reload
       window.location.href = '/dashboard';
     } catch (err: any) {
       const duration = Date.now() - startTime;

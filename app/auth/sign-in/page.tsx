@@ -63,9 +63,28 @@ export default function SignInPage() {
         duration,
       });
 
+      console.log('Setting session cookies via API...');
+
+      // Call the auth callback API to set session cookies for server-side use
+      try {
+        await fetch('/api/auth/callback', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            access_token: result.session.access_token,
+            refresh_token: result.session.refresh_token,
+          }),
+        });
+        console.log('Session cookies set successfully');
+      } catch (callbackError) {
+        console.error('Error setting session cookies:', callbackError);
+      }
+
       console.log('Redirecting to dashboard...');
 
-      // Use window.location for a full page reload to ensure session cookies are set
+      // Use window.location for a full page reload
       window.location.href = '/dashboard';
     } catch (err: any) {
       const duration = Date.now() - startTime;
