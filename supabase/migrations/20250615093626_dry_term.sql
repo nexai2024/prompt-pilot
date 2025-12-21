@@ -37,6 +37,7 @@ CREATE TYPE billing_interval AS ENUM ('monthly', 'yearly');
 -- Profiles table (extends auth.users)
 CREATE TABLE IF NOT EXISTS profiles (
   id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  clerk_user_id text not null default auth.jwt()->>'sub',
   email text NOT NULL,
   first_name text,
   last_name text,
@@ -67,6 +68,7 @@ CREATE TABLE IF NOT EXISTS organization_members (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id uuid REFERENCES organizations(id) ON DELETE CASCADE,
   user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE,
+  clerk_user_id text not null default auth.jwt()->>'sub',
   role user_role DEFAULT 'developer',
   invited_by uuid REFERENCES auth.users(id),
   joined_at timestamptz DEFAULT now(),
@@ -93,6 +95,7 @@ CREATE TABLE IF NOT EXISTS subscriptions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id uuid REFERENCES organizations(id) ON DELETE CASCADE,
   plan_id uuid REFERENCES billing_plans(id),
+  clerk_user_id text not null default auth.jwt()->>'sub',
   billing_interval billing_interval DEFAULT 'monthly',
   status text DEFAULT 'active',
   current_period_start timestamptz DEFAULT now(),
@@ -106,6 +109,7 @@ CREATE TABLE IF NOT EXISTS subscriptions (
 CREATE TABLE IF NOT EXISTS prompts (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id uuid REFERENCES organizations(id) ON DELETE CASCADE,
+  clerk_user_id text not null default auth.jwt()->>'sub',
   created_by uuid REFERENCES auth.users(id) ON DELETE CASCADE,
   name text NOT NULL,
   description text,
@@ -158,6 +162,7 @@ CREATE TABLE IF NOT EXISTS prompt_variables (
 CREATE TABLE IF NOT EXISTS api_endpoints (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id uuid REFERENCES organizations(id) ON DELETE CASCADE,
+  clerk_user_id text not null default auth.jwt()->>'sub',
   created_by uuid REFERENCES auth.users(id) ON DELETE CASCADE,
   prompt_id uuid REFERENCES prompts(id) ON DELETE SET NULL,
   name text NOT NULL,
@@ -189,6 +194,7 @@ CREATE TABLE IF NOT EXISTS endpoint_fields (
 CREATE TABLE IF NOT EXISTS deployments (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id uuid REFERENCES organizations(id) ON DELETE CASCADE,
+  clerk_user_id text not null default auth.jwt()->>'sub',
   endpoint_id uuid REFERENCES api_endpoints(id) ON DELETE CASCADE,
   created_by uuid REFERENCES auth.users(id) ON DELETE CASCADE,
   name text NOT NULL,
@@ -209,6 +215,7 @@ CREATE TABLE IF NOT EXISTS deployments (
 CREATE TABLE IF NOT EXISTS api_calls (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   deployment_id uuid REFERENCES deployments(id) ON DELETE CASCADE,
+  clerk_user_id text not null default auth.jwt()->>'sub',
   organization_id uuid REFERENCES organizations(id) ON DELETE CASCADE,
   method text NOT NULL,
   path text NOT NULL,
@@ -230,6 +237,7 @@ CREATE TABLE IF NOT EXISTS api_calls (
 -- Analytics events
 CREATE TABLE IF NOT EXISTS analytics_events (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  clerk_user_id text not null default auth.jwt()->>'sub',
   organization_id uuid REFERENCES organizations(id) ON DELETE CASCADE,
   user_id uuid REFERENCES auth.users(id) ON DELETE SET NULL,
   event_type text NOT NULL,
@@ -244,6 +252,7 @@ CREATE TABLE IF NOT EXISTS analytics_events (
 CREATE TABLE IF NOT EXISTS api_keys (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id uuid REFERENCES organizations(id) ON DELETE CASCADE,
+  clerk_user_id text not null default auth.jwt()->>'sub',
   created_by uuid REFERENCES auth.users(id) ON DELETE CASCADE,
   name text NOT NULL,
   key_hash text NOT NULL UNIQUE,
@@ -259,6 +268,7 @@ CREATE TABLE IF NOT EXISTS api_keys (
 CREATE TABLE IF NOT EXISTS usage_metrics (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id uuid REFERENCES organizations(id) ON DELETE CASCADE,
+  clerk_user_id text not null default auth.jwt()->>'sub',
   metric_type text NOT NULL, -- 'api_calls', 'storage', 'bandwidth', etc.
   value integer NOT NULL,
   period_start timestamptz NOT NULL,
@@ -270,6 +280,7 @@ CREATE TABLE IF NOT EXISTS usage_metrics (
 CREATE TABLE IF NOT EXISTS notifications (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE,
+  clerk_user_id text not null default auth.jwt()->>'sub',
   organization_id uuid REFERENCES organizations(id) ON DELETE CASCADE,
   type notification_type DEFAULT 'info',
   title text NOT NULL,
@@ -283,6 +294,7 @@ CREATE TABLE IF NOT EXISTS notifications (
 CREATE TABLE IF NOT EXISTS audit_logs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id uuid REFERENCES organizations(id) ON DELETE CASCADE,
+  clerk_user_id text not null default auth.jwt()->>'sub',
   user_id uuid REFERENCES auth.users(id) ON DELETE SET NULL,
   action text NOT NULL,
   resource_type text NOT NULL,
@@ -317,20 +329,26 @@ ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can read own profile"
   ON profiles
   FOR SELECT
-  TO authenticated
-  USING (auth.uid() = id);
+  TO authenticated  
+  USING (
+((SELECT auth.jwt()->>'sub') = (user_id)::text)
+);
 
 CREATE POLICY "Users can update own profile"
   ON profiles
   FOR UPDATE
   TO authenticated
-  USING (auth.uid() = id);
+  USING (
+((SELECT auth.jwt()->>'sub') = (user_id)::text)
+);
 
 CREATE POLICY "Users can insert own profile"
   ON profiles
   FOR INSERT
   TO authenticated
-  WITH CHECK (auth.uid() = id);
+  WITH CHECK (
+((SELECT auth.jwt()->>'sub') = (user_id)::text)
+);
 
 -- Policies for organizations
 CREATE POLICY "Users can read organizations they belong to"
@@ -341,7 +359,7 @@ CREATE POLICY "Users can read organizations they belong to"
     id IN (
       SELECT organization_id 
       FROM organization_members 
-      WHERE user_id = auth.uid()
+      WHERE user_id = (SELECT auth.jwt()->>'sub')
     )
   );
 
@@ -349,7 +367,9 @@ CREATE POLICY "Users can create organizations"
   ON organizations
   FOR INSERT
   TO authenticated
-  WITH CHECK (auth.uid() = created_by);
+  WITH CHECK (
+((SELECT auth.jwt()->>'sub') = (created_by)::text)
+);
 
 CREATE POLICY "Organization owners can update organizations"
   ON organizations
@@ -359,7 +379,7 @@ CREATE POLICY "Organization owners can update organizations"
     id IN (
       SELECT organization_id 
       FROM organization_members 
-      WHERE user_id = auth.uid() AND role = 'owner'
+      WHERE user_id = (SELECT auth.jwt()->>'sub') AND role = 'owner'
     )
   );
 
@@ -372,7 +392,7 @@ CREATE POLICY "Users can read organization members for their organizations"
     organization_id IN (
       SELECT organization_id 
       FROM organization_members 
-      WHERE user_id = auth.uid()
+      WHERE user_id = (SELECT auth.jwt()->>'sub')
     )
   );
 
@@ -384,7 +404,7 @@ CREATE POLICY "Organization owners can manage members"
     organization_id IN (
       SELECT organization_id 
       FROM organization_members 
-      WHERE user_id = auth.uid() AND role = 'owner'
+      WHERE user_id = (SELECT auth.jwt()->>'sub') AND role = 'owner'
     )
   );
 
@@ -404,7 +424,7 @@ CREATE POLICY "Users can read subscriptions for their organizations"
     organization_id IN (
       SELECT organization_id 
       FROM organization_members 
-      WHERE user_id = auth.uid()
+      WHERE user_id = (SELECT auth.jwt()->>'sub')
     )
   );
 
@@ -417,7 +437,7 @@ CREATE POLICY "Users can read prompts from their organizations"
     organization_id IN (
       SELECT organization_id 
       FROM organization_members 
-      WHERE user_id = auth.uid()
+      WHERE user_id = (SELECT auth.jwt()->>'sub')
     )
   );
 
@@ -431,14 +451,14 @@ CREATE POLICY "Users can create prompts in their organizations"
       FROM organization_members 
       WHERE user_id = auth.uid() AND role IN ('owner', 'admin', 'developer')
     )
-    AND auth.uid() = created_by
+    AND (SELECT auth.jwt()->>'sub') = (created_by)::text
   );
 
 CREATE POLICY "Users can update prompts they created"
   ON prompts
   FOR UPDATE
   TO authenticated
-  USING (auth.uid() = created_by);
+  USING ((SELECT auth.jwt()->>'sub') = (created_by)::text);
 
 -- Policies for prompt versions
 CREATE POLICY "Users can read prompt versions from their organizations"
@@ -451,7 +471,7 @@ CREATE POLICY "Users can read prompt versions from their organizations"
       WHERE organization_id IN (
         SELECT organization_id 
         FROM organization_members 
-        WHERE user_id = auth.uid()
+        WHERE user_id = (SELECT auth.jwt()->>'sub')
       )
     )
   );
@@ -469,7 +489,7 @@ CREATE POLICY "Users can create prompt versions"
         WHERE user_id = auth.uid() AND role IN ('owner', 'admin', 'developer')
       )
     )
-    AND auth.uid() = created_by
+    AND (SELECT auth.jwt()->>'sub') = (created_by)::text
   );
 
 -- Policies for prompt variables
@@ -483,7 +503,7 @@ CREATE POLICY "Users can read prompt variables from their organizations"
       WHERE organization_id IN (
         SELECT organization_id 
         FROM organization_members 
-        WHERE user_id = auth.uid()
+          WHERE user_id = (SELECT auth.jwt()->>'sub')
       )
     )
   );
@@ -498,7 +518,7 @@ CREATE POLICY "Users can manage prompt variables"
       WHERE organization_id IN (
         SELECT organization_id 
         FROM organization_members 
-        WHERE user_id = auth.uid() AND role IN ('owner', 'admin', 'developer')
+        WHERE user_id = (SELECT auth.jwt()->>'sub') AND role IN ('owner', 'admin', 'developer')
       )
     )
   );
@@ -512,7 +532,7 @@ CREATE POLICY "Users can read API endpoints from their organizations"
     organization_id IN (
       SELECT organization_id 
       FROM organization_members 
-      WHERE user_id = auth.uid()
+      WHERE user_id = (SELECT auth.jwt()->>'sub')
     )
   );
 
@@ -524,16 +544,16 @@ CREATE POLICY "Users can create API endpoints in their organizations"
     organization_id IN (
       SELECT organization_id 
       FROM organization_members 
-      WHERE user_id = auth.uid() AND role IN ('owner', 'admin', 'developer')
+      WHERE user_id = (SELECT auth.jwt()->>'sub') AND role IN ('owner', 'admin', 'developer')
     )
-    AND auth.uid() = created_by
+    AND (SELECT auth.jwt()->>'sub') = (created_by)::text
   );
 
 CREATE POLICY "Users can update API endpoints they created"
   ON api_endpoints
   FOR UPDATE
   TO authenticated
-  USING (auth.uid() = created_by);
+  USING ((SELECT auth.jwt()->>'sub') = (created_by)::text);
 
 -- Policies for endpoint fields
 CREATE POLICY "Users can read endpoint fields from their organizations"
@@ -546,7 +566,7 @@ CREATE POLICY "Users can read endpoint fields from their organizations"
       WHERE organization_id IN (
         SELECT organization_id 
         FROM organization_members 
-        WHERE user_id = auth.uid()
+        WHERE user_id = (SELECT auth.jwt()->>'sub')
       )
     )
   );
@@ -561,7 +581,7 @@ CREATE POLICY "Users can manage endpoint fields"
       WHERE organization_id IN (
         SELECT organization_id 
         FROM organization_members 
-        WHERE user_id = auth.uid() AND role IN ('owner', 'admin', 'developer')
+        WHERE user_id = (SELECT auth.jwt()->>'sub') AND role IN ('owner', 'admin', 'developer')
       )
     )
   );
@@ -575,7 +595,7 @@ CREATE POLICY "Users can read deployments from their organizations"
     organization_id IN (
       SELECT organization_id 
       FROM organization_members 
-      WHERE user_id = auth.uid()
+      WHERE user_id = (SELECT auth.jwt()->>'sub')
     )
   );
 
@@ -587,16 +607,16 @@ CREATE POLICY "Users can create deployments in their organizations"
     organization_id IN (
       SELECT organization_id 
       FROM organization_members 
-      WHERE user_id = auth.uid() AND role IN ('owner', 'admin', 'developer')
+      WHERE user_id = (SELECT auth.jwt()->>'sub') AND role IN ('owner', 'admin', 'developer')
     )
-    AND auth.uid() = created_by
+    AND (SELECT auth.jwt()->>'sub') = (created_by)::text
   );
 
 CREATE POLICY "Users can update deployments they created"
   ON deployments
   FOR UPDATE
   TO authenticated
-  USING (auth.uid() = created_by);
+  USING ((SELECT auth.jwt()->>'sub') = (created_by)::text);
 
 -- Policies for API calls
 CREATE POLICY "Users can read API calls from their organizations"
@@ -607,7 +627,7 @@ CREATE POLICY "Users can read API calls from their organizations"
     organization_id IN (
       SELECT organization_id 
       FROM organization_members 
-      WHERE user_id = auth.uid()
+      WHERE user_id = (SELECT auth.jwt()->>'sub')
     )
   );
 
@@ -620,7 +640,7 @@ CREATE POLICY "Users can read analytics events from their organizations"
     organization_id IN (
       SELECT organization_id 
       FROM organization_members 
-      WHERE user_id = auth.uid()
+        WHERE user_id = (SELECT auth.jwt()->>'sub')
     )
   );
 
@@ -633,7 +653,7 @@ CREATE POLICY "Users can read API keys from their organizations"
     organization_id IN (
       SELECT organization_id 
       FROM organization_members 
-      WHERE user_id = auth.uid()
+      WHERE user_id = (SELECT auth.jwt()->>'sub')
     )
   );
 
@@ -645,16 +665,16 @@ CREATE POLICY "Users can create API keys in their organizations"
     organization_id IN (
       SELECT organization_id 
       FROM organization_members 
-      WHERE user_id = auth.uid() AND role IN ('owner', 'admin', 'developer')
+      WHERE user_id = (SELECT auth.jwt()->>'sub') AND role IN ('owner', 'admin', 'developer')
     )
-    AND auth.uid() = created_by
+    AND (SELECT auth.jwt()->>'sub') = (created_by)::text
   );
 
 CREATE POLICY "Users can update API keys they created"
   ON api_keys
   FOR UPDATE
   TO authenticated
-  USING (auth.uid() = created_by);
+  USING ((SELECT auth.jwt()->>'sub') = (created_by)::text);
 
 -- Policies for usage metrics
 CREATE POLICY "Users can read usage metrics from their organizations"
@@ -665,7 +685,7 @@ CREATE POLICY "Users can read usage metrics from their organizations"
     organization_id IN (
       SELECT organization_id 
       FROM organization_members 
-      WHERE user_id = auth.uid()
+      WHERE user_id = (SELECT auth.jwt()->>'sub')
     )
   );
 
@@ -674,13 +694,13 @@ CREATE POLICY "Users can read their own notifications"
   ON notifications
   FOR SELECT
   TO authenticated
-  USING (auth.uid() = user_id);
+  USING ((SELECT auth.jwt()->>'sub') = (user_id)::text);
 
 CREATE POLICY "Users can update their own notifications"
   ON notifications
   FOR UPDATE
   TO authenticated
-  USING (auth.uid() = user_id);
+  USING ((SELECT auth.jwt()->>'sub') = (user_id)::text);
 
 -- Policies for audit logs
 CREATE POLICY "Users can read audit logs from their organizations"
@@ -691,7 +711,7 @@ CREATE POLICY "Users can read audit logs from their organizations"
     organization_id IN (
       SELECT organization_id 
       FROM organization_members 
-      WHERE user_id = auth.uid() AND role IN ('owner', 'admin')
+      WHERE user_id = (SELECT auth.jwt()->>'sub') AND role IN ('owner', 'admin')
     )
   );
 

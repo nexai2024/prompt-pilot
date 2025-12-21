@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   try {
     // Mock data for demo (no database)
     return NextResponse.json({ variables: [] });
@@ -9,14 +10,15 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   }
 }
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   try {
     const body = await req.json();
 
     // Mock successful creation (no database)
     const mockVariable = {
       id: Math.random().toString(36).substr(2, 9),
-      prompt_id: params.id,
+      prompt_id: id,
       ...body,
       created_at: new Date().toISOString()
     };

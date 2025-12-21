@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string; versionId: string } }
+  { params }: { params: Promise<{ id: string; versionId: string }> }
 ) {
+  const { id, versionId } = await params;
   try {
     // Mock successful revert (no database)
     const mockPrompt = {
-      id: params.id,
-      reverted_from_version: params.versionId,
+      id: id,
+      reverted_from_version: versionId,
       updated_at: new Date().toISOString()
     };
 
