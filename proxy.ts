@@ -1,18 +1,53 @@
-import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
 
-const isPublicRoute = createRouteMatcher(['/sign-in(.*)', '/sign-up(.*)'])
+const publicRoutes = [
+  '/',
+  '/sign-in',
+  '/sign-up',
+  '/reset-password',
+  '/auth/callback',
+];
 
-export default clerkMiddleware(async (auth, req) => {
-  if (!isPublicRoute(req)) {
-    await auth.protect()
+function isPublicRoute(pathname: string): boolean {
+  if (publicRoutes.includes(pathname)) return true;
+  if (pathname.startsWith('/api/auth')) return true;
+  if (pathname.startsWith('/api/gateway')) return true;
+  if (pathname === '/api/auth-providers') return true;
+  return false;
+}
+
+function hasSessionCookie(request: NextRequest): boolean {
+  const cookieHeader = request.headers.get('cookie') || '';
+  return (
+    cookieHeader.includes('better-auth.session_token=') ||
+    cookieHeader.includes('__Secure-better-auth.session_token=')
+  );
+}
+
+export function proxy(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  if (isPublicRoute(pathname)) {
+    return NextResponse.next();
   }
-})
+
+  if (!hasSessionCookie(request)) {
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const signInUrl = new URL('/sign-in', request.url);
+    signInUrl.searchParams.set('redirect', pathname);
+    return NextResponse.redirect(signInUrl);
+  }
+
+  return NextResponse.next();
+}
 
 export const config = {
   matcher: [
-    // Skip Next.js internals and all static files, unless found in search params
     '/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
-    // Always run for API routes
     '/(api|trpc)(.*)',
   ],
-}
+};

@@ -65,7 +65,7 @@ export default function Dashboard() {
   const loadDashboardStats = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/dashboard/stats`);
+      const response = await fetch(`/api/dashboard/stats`, { credentials: 'include' });
       const data = await response.json();
 
       if (!response.ok) {

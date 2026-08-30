@@ -1,129 +1,92 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { 
+import {
   ArrowLeft,
   Rocket,
   Globe,
-  Activity,
   Settings,
   Play,
   Pause,
-  Trash2,
   Copy,
   ExternalLink,
   Search,
-  Filter,
-  MoreVertical,
   CheckCircle,
   XCircle,
   Clock,
   AlertCircle,
-  TrendingUp,
-  Users,
-  Zap
+  Loader2,
 } from 'lucide-react';
 
 interface Deployment {
   id: string;
   name: string;
   url: string;
-  status: 'deployed' | 'building' | 'failed' | 'paused';
-  environment: 'production' | 'staging' | 'development';
+  status: string;
+  environment: string;
   version: string;
-  lastDeployed: string;
-  requests: number;
-  uptime: number;
   region: string;
-  domain?: string;
+  custom_domain?: string | null;
+  deployed_at?: string | null;
+  error_message?: string | null;
+}
+
+function formatDeployedAt(value?: string | null): string {
+  if (!value) return 'Not deployed yet';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString();
 }
 
 export default function Deployments() {
+  const [deployments, setDeployments] = useState<Deployment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [environmentFilter, setEnvironmentFilter] = useState('all');
 
-  const deployments: Deployment[] = [
-    {
-      id: '1',
-      name: 'Content Generator API',
-      url: 'https://api-content-gen-prod.promptpilot.com',
-      status: 'deployed',
-      environment: 'production',
-      version: 'v2.1.0',
-      lastDeployed: '2 hours ago',
-      requests: 12459,
-      uptime: 99.9,
-      region: 'us-east-1',
-      domain: 'content.myapp.com'
-    },
-    {
-      id: '2',
-      name: 'Sentiment Analyzer',
-      url: 'https://api-sentiment-prod.promptpilot.com',
-      status: 'deployed',
-      environment: 'production',
-      version: 'v1.3.2',
-      lastDeployed: '1 day ago',
-      requests: 8234,
-      uptime: 99.8,
-      region: 'us-west-2'
-    },
-    {
-      id: '3',
-      name: 'Text Summarizer',
-      url: 'https://api-summarizer-staging.promptpilot.com',
-      status: 'building',
-      environment: 'staging',
-      version: 'v1.0.0-beta',
-      lastDeployed: '5 minutes ago',
-      requests: 0,
-      uptime: 0,
-      region: 'eu-west-1'
-    },
-    {
-      id: '4',
-      name: 'Image Classifier',
-      url: 'https://api-classifier-prod.promptpilot.com',
-      status: 'deployed',
-      environment: 'production',
-      version: 'v3.0.1',
-      lastDeployed: '3 days ago',
-      requests: 5678,
-      uptime: 99.5,
-      region: 'ap-southeast-1'
-    },
-    {
-      id: '5',
-      name: 'Email Assistant',
-      url: 'https://api-email-dev.promptpilot.com',
-      status: 'paused',
-      environment: 'development',
-      version: 'v0.9.0',
-      lastDeployed: '1 week ago',
-      requests: 156,
-      uptime: 95.0,
-      region: 'us-east-1'
-    },
-    {
-      id: '6',
-      name: 'Code Reviewer',
-      url: 'https://api-code-review-prod.promptpilot.com',
-      status: 'failed',
-      environment: 'production',
-      version: 'v1.2.0',
-      lastDeployed: '6 hours ago',
-      requests: 2341,
-      uptime: 98.7,
-      region: 'eu-central-1'
+  useEffect(() => {
+    async function loadDeployments() {
+      try {
+        setLoading(true);
+        setError(null);
+        const response = await fetch('/api/deployments', { credentials: 'include' });
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to load deployments');
+        }
+
+        setDeployments(
+          (data.deployments || []).map((d: Record<string, unknown>) => ({
+            id: String(d.id),
+            name: String(d.name || ''),
+            url: String(d.url || ''),
+            status: String(d.status || 'building'),
+            environment: String(d.environment || 'production'),
+            version: String(d.version || 'v1.0.0'),
+            region: String(d.region || 'us-east-1'),
+            custom_domain: d.custom_domain ? String(d.custom_domain) : null,
+            deployed_at: d.deployed_at ? String(d.deployed_at) : null,
+            error_message: d.error_message ? String(d.error_message) : null,
+          }))
+        );
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load deployments');
+      } finally {
+        setLoading(false);
+      }
     }
-  ];
+
+    loadDeployments();
+  }, []);
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -168,21 +131,27 @@ export default function Deployments() {
     }
   };
 
-  const filteredDeployments = deployments.filter(deployment => {
+  const filteredDeployments = deployments.filter((deployment) => {
     const matchesSearch = deployment.name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || deployment.status === statusFilter;
-    const matchesEnvironment = environmentFilter === 'all' || deployment.environment === environmentFilter;
+    const matchesEnvironment =
+      environmentFilter === 'all' || deployment.environment === environmentFilter;
     return matchesSearch && matchesStatus && matchesEnvironment;
   });
 
   const totalDeployments = deployments.length;
-  const activeDeployments = deployments.filter(d => d.status === 'deployed').length;
-  const totalRequests = deployments.reduce((sum, d) => sum + d.requests, 0);
-  const averageUptime = deployments.reduce((sum, d) => sum + d.uptime, 0) / deployments.length;
+  const activeDeployments = deployments.filter((d) => d.status === 'deployed').length;
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-green-600" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
       <div className="bg-white border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
@@ -216,8 +185,13 @@ export default function Deployments() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        {error && (
+          <Card className="mb-6 border-red-200 bg-red-50">
+            <CardContent className="p-4 text-sm text-red-800">{error}</CardContent>
+          </Card>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           <Card>
             <CardContent className="p-6">
               <div className="flex items-center">
@@ -239,43 +213,14 @@ export default function Deployments() {
                   <CheckCircle className="w-6 h-6 text-green-600" />
                 </div>
                 <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Active APIs</p>
+                  <p className="text-sm font-medium text-gray-600">Active Deployments</p>
                   <p className="text-2xl font-bold text-gray-900">{activeDeployments}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center">
-                <div className="flex-shrink-0 p-3 bg-purple-100 rounded-lg">
-                  <Activity className="w-6 h-6 text-purple-600" />
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Total Requests</p>
-                  <p className="text-2xl font-bold text-gray-900">{totalRequests.toLocaleString()}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center">
-                <div className="flex-shrink-0 p-3 bg-orange-100 rounded-lg">
-                  <TrendingUp className="w-6 h-6 text-orange-600" />
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Avg Uptime</p>
-                  <p className="text-2xl font-bold text-gray-900">{averageUptime.toFixed(1)}%</p>
                 </div>
               </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Filters and Search */}
         <Card className="mb-6">
           <CardContent className="p-6">
             <div className="flex flex-col sm:flex-row gap-4">
@@ -319,129 +264,73 @@ export default function Deployments() {
           </CardContent>
         </Card>
 
-        {/* Deployments List */}
         <div className="space-y-4">
           {filteredDeployments.map((deployment) => (
             <Card key={deployment.id} className="hover:shadow-md transition-shadow">
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-4">
-                    <div className="flex-shrink-0">
-                      {getStatusIcon(deployment.status)}
-                    </div>
+                    <div className="flex-shrink-0">{getStatusIcon(deployment.status)}</div>
                     <div>
                       <div className="flex items-center space-x-3 mb-1">
                         <h3 className="text-lg font-semibold text-gray-900">{deployment.name}</h3>
-                        <Badge className={getStatusColor(deployment.status)}>
-                          {deployment.status}
-                        </Badge>
+                        <Badge className={getStatusColor(deployment.status)}>{deployment.status}</Badge>
                         <Badge className={getEnvironmentColor(deployment.environment)}>
                           {deployment.environment}
                         </Badge>
                       </div>
-                      <div className="flex items-center space-x-4 text-sm text-gray-500">
+                      <div className="flex items-center flex-wrap gap-x-4 gap-y-1 text-sm text-gray-500">
                         <span>Version {deployment.version}</span>
                         <span>•</span>
-                        <span>Last deployed {deployment.lastDeployed}</span>
+                        <span>{formatDeployedAt(deployment.deployed_at)}</span>
                         <span>•</span>
                         <span>{deployment.region}</span>
-                        {deployment.domain && (
+                        {deployment.custom_domain && (
                           <>
                             <span>•</span>
-                            <span className="text-blue-600">{deployment.domain}</span>
+                            <span className="text-blue-600">{deployment.custom_domain}</span>
                           </>
                         )}
                       </div>
                     </div>
                   </div>
-                  
-                  <div className="flex items-center space-x-6">
-                    {/* Metrics */}
-                    <div className="hidden md:flex items-center space-x-6 text-sm">
-                      <div className="text-center">
-                        <p className="font-semibold text-gray-900">{deployment.requests.toLocaleString()}</p>
-                        <p className="text-gray-500">Requests</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="font-semibold text-gray-900">{deployment.uptime}%</p>
-                        <p className="text-gray-500">Uptime</p>
-                      </div>
-                    </div>
 
-                    {/* Actions */}
-                    <div className="flex items-center space-x-2">
-                      {deployment.status === 'deployed' && (
-                        <Button size="sm" variant="outline" asChild>
-                          <a href={deployment.url} target="_blank" rel="noopener noreferrer">
-                            <ExternalLink className="w-4 h-4 mr-2" />
-                            Open
-                          </a>
-                        </Button>
-                      )}
-                      <Button size="sm" variant="outline">
+                  <div className="flex items-center space-x-2">
+                    {deployment.status === 'deployed' && deployment.url && (
+                      <Button size="sm" variant="outline" asChild>
+                        <a href={deployment.url} target="_blank" rel="noopener noreferrer">
+                          <ExternalLink className="w-4 h-4 mr-2" />
+                          Open
+                        </a>
+                      </Button>
+                    )}
+                    {deployment.url && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => navigator.clipboard.writeText(deployment.url)}
+                      >
                         <Copy className="w-4 h-4 mr-2" />
                         Copy URL
                       </Button>
-                      <Button size="sm" variant="outline">
-                        <MoreVertical className="w-4 h-4" />
-                      </Button>
-                    </div>
+                    )}
                   </div>
                 </div>
 
-                {/* URL */}
-                <div className="mt-4 flex items-center space-x-2">
-                  <Globe className="w-4 h-4 text-gray-400" />
-                  <code className="text-sm bg-gray-100 px-2 py-1 rounded font-mono">
-                    {deployment.url}
-                  </code>
-                </div>
+                {deployment.url && (
+                  <div className="mt-4 flex items-center space-x-2">
+                    <Globe className="w-4 h-4 text-gray-400" />
+                    <code className="text-sm bg-gray-100 px-2 py-1 rounded font-mono">
+                      {deployment.url}
+                    </code>
+                  </div>
+                )}
 
-                {/* Quick Actions for different statuses */}
-                {deployment.status === 'failed' && (
+                {deployment.status === 'failed' && deployment.error_message && (
                   <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <XCircle className="w-4 h-4 text-red-600" />
-                        <span className="text-sm text-red-800">Deployment failed. Check logs for details.</span>
-                      </div>
-                      <div className="flex space-x-2">
-                        <Button size="sm" variant="outline">
-                          View Logs
-                        </Button>
-                        <Button size="sm" className="bg-red-600 hover:bg-red-700 text-white">
-                          Retry Deploy
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {deployment.status === 'building' && (
-                  <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <Clock className="w-4 h-4 text-yellow-600 animate-spin" />
-                        <span className="text-sm text-yellow-800">Deployment in progress...</span>
-                      </div>
-                      <Button size="sm" variant="outline">
-                        View Logs
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                {deployment.status === 'paused' && (
-                  <div className="mt-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <Pause className="w-4 h-4 text-gray-600" />
-                        <span className="text-sm text-gray-800">Deployment is paused.</span>
-                      </div>
-                      <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white">
-                        <Play className="w-4 h-4 mr-2" />
-                        Resume
-                      </Button>
+                    <div className="flex items-center space-x-2">
+                      <XCircle className="w-4 h-4 text-red-600" />
+                      <span className="text-sm text-red-800">{deployment.error_message}</span>
                     </div>
                   </div>
                 )}
@@ -458,12 +347,12 @@ export default function Deployments() {
               <p className="text-gray-500 mb-6">
                 {searchTerm || statusFilter !== 'all' || environmentFilter !== 'all'
                   ? 'Try adjusting your search or filters.'
-                  : 'Create your first API deployment to get started.'}
+                  : 'Create your first API in the designer, then deploy it here.'}
               </p>
               <Button asChild>
                 <Link href="/api-designer">
                   <Rocket className="w-4 h-4 mr-2" />
-                  Create Deployment
+                  Go to API Designer
                 </Link>
               </Button>
             </CardContent>

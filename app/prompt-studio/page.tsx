@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ArrowLeft, Play, Save, Settings, Brain, Zap, Plus, Copy, Trash2, Edit, TestTube, Variable as Variables, History, Download, Upload, RefreshCw, Check, X, AlertTriangle, Sparkles, Code, Wand2, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { VersionHistory } from '@/components/prompt-studio/VersionHistory';
+import { PromptAssistPanel } from '@/components/prompt-studio/PromptAssistPanel';
 
 interface Variable {
   id?: string;
@@ -75,7 +76,7 @@ export default function PromptStudio() {
   const loadRecentPrompts = async () => {
     try {
       setLoadingPrompts(true);
-      const response = await fetch(`/api/prompts`);
+      const response = await fetch(`/api/prompts`, { credentials: 'include' });
       const data = await response.json();
 
       if (response.ok) {
@@ -151,7 +152,9 @@ export default function PromptStudio() {
       setCaching(promptToLoad.caching ?? true);
 
       // Load variables
-      const response = await fetch(`/api/prompts/${promptToLoad.id}/variables`);
+      const response = await fetch(`/api/prompts/${promptToLoad.id}/variables`, {
+        credentials: 'include',
+      });
       const data = await response.json();
 
       if (response.ok) {
@@ -207,6 +210,7 @@ export default function PromptStudio() {
         // Update existing
         response = await fetch(`/api/prompts/${promptId}`, {
           method: 'PUT',
+          credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(promptData)
         });
@@ -214,6 +218,7 @@ export default function PromptStudio() {
         // Create new
         response = await fetch('/api/prompts', {
           method: 'POST',
+          credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(promptData)
         });
@@ -232,6 +237,7 @@ export default function PromptStudio() {
       if (variables.length > 0) {
         const variablesResponse = await fetch(`/api/prompts/${savedPromptId}/variables`, {
           method: 'POST',
+          credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ variables })
         });
@@ -245,6 +251,7 @@ export default function PromptStudio() {
       // Create version snapshot
       const versionResponse = await fetch(`/api/prompts/${savedPromptId}/versions`, {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           content: prompt,
@@ -290,12 +297,14 @@ export default function PromptStudio() {
 
       const response = await fetch('/api/llm/execute', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           prompt: processedPrompt,
           model: selectedModel,
           temperature,
-          max_tokens: maxTokens
+          max_tokens: maxTokens,
+          prompt_id: promptId || undefined,
         })
       });
 
@@ -338,57 +347,6 @@ export default function PromptStudio() {
     setMaxTokens(150);
     setResponseFormat('text');
     toast.success('New prompt created');
-  };
-
-  const promptTemplates = [
-    {
-      name: 'Content Generator',
-      description: 'Generate engaging content from topics',
-      prompt: 'Create engaging content about {{topic}}. Include key points, examples, and a compelling conclusion.',
-      variables: [{ name: 'topic', value: '', type: 'string', description: 'Content topic', required: true }],
-      category: 'Content',
-      color: 'from-purple-500 to-pink-500'
-    },
-    {
-      name: 'Sentiment Analyzer',
-      description: 'Analyze text sentiment and emotions',
-      prompt: 'Analyze the sentiment of the following text and provide a detailed breakdown:\n\n{{text}}',
-      variables: [{ name: 'text', value: '', type: 'string', description: 'Text to analyze', required: true }],
-      category: 'Analysis',
-      color: 'from-blue-500 to-cyan-500'
-    },
-    {
-      name: 'Code Reviewer',
-      description: 'Review code for best practices',
-      prompt: 'Review the following {{language}} code and provide feedback on best practices, potential issues, and improvements:\n\n{{code}}',
-      variables: [
-        { name: 'language', value: '', type: 'string', description: 'Programming language', required: true },
-        { name: 'code', value: '', type: 'string', description: 'Code to review', required: true }
-      ],
-      category: 'Development',
-      color: 'from-green-500 to-emerald-500'
-    },
-    {
-      name: 'Email Assistant',
-      description: 'Draft professional emails',
-      prompt: 'Draft a professional email with the following requirements:\nSubject: {{subject}}\nRecipient: {{recipient}}\nContext: {{context}}\nTone: {{tone}}',
-      variables: [
-        { name: 'subject', value: '', type: 'string', description: 'Email subject', required: true },
-        { name: 'recipient', value: '', type: 'string', description: 'Email recipient', required: true },
-        { name: 'context', value: '', type: 'string', description: 'Email context', required: true },
-        { name: 'tone', value: '', type: 'string', description: 'Email tone', required: true }
-      ],
-      category: 'Communication',
-      color: 'from-orange-500 to-red-500'
-    }
-  ];
-
-  const loadTemplate = (template: any) => {
-    setPrompt(template.prompt);
-    setVariables(template.variables);
-    setPromptName(template.name);
-    setPromptDescription(template.description);
-    toast.success(`Template "${template.name}" loaded`);
   };
 
   return (
@@ -443,33 +401,6 @@ export default function PromptStudio() {
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
           {/* Sidebar */}
           <div className="lg:col-span-1 space-y-6">
-            {/* Templates */}
-            <Card className="shadow-xl border-0 bg-white">
-              <CardHeader className="border-b border-gray-100">
-                <CardTitle className="text-lg flex items-center">
-                  <Wand2 className="w-5 h-5 mr-2 text-purple-600" />
-                  Quick Start Templates
-                </CardTitle>
-                <CardDescription>Choose a template to get started quickly</CardDescription>
-              </CardHeader>
-              <CardContent className="p-4 space-y-3">
-                {promptTemplates.map((template, index) => (
-                  <div
-                    key={index}
-                    className="p-4 border border-gray-100 rounded-xl cursor-pointer hover:bg-gray-50 transition-all duration-200 group"
-                    onClick={() => loadTemplate(template)}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="font-semibold text-sm text-gray-900 group-hover:text-purple-600 transition-colors">{template.name}</h4>
-                      <Badge variant="outline" className="text-xs">{template.category}</Badge>
-                    </div>
-                    <p className="text-xs text-gray-600 leading-relaxed">{template.description}</p>
-                    <div className={`mt-2 h-1 bg-gradient-to-r ${template.color} rounded-full opacity-60`}></div>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-
             {/* Recent Prompts */}
             <Card className="shadow-xl border-0 bg-white">
               <CardHeader className="border-b border-gray-100">
@@ -552,7 +483,21 @@ export default function PromptStudio() {
                       />
                     </div>
                     <div>
-                      <div className="flex items-center justify-between mb-2">
+                      <PromptAssistPanel
+                        prompt={prompt}
+                        promptId={promptId}
+                        onApplyGenerate={({ prompt: newPrompt, name, description, variables: newVars }) => {
+                          setPrompt(newPrompt);
+                          if (name) setPromptName(name);
+                          if (description) setPromptDescription(description);
+                          if (newVars.length > 0) setVariables(newVars);
+                        }}
+                        onApplyEnhance={({ prompt: newPrompt, variables: newVars }) => {
+                          setPrompt(newPrompt);
+                          if (newVars.length > 0) setVariables(newVars);
+                        }}
+                      />
+                      <div className="flex items-center justify-between mb-2 mt-4">
                         <Label htmlFor="prompt-text" className="text-sm font-medium">Prompt Text *</Label>
                         <Button size="sm" variant="outline" onClick={extractVariablesFromPrompt}>
                           <Sparkles className="w-3 h-3 mr-1" />

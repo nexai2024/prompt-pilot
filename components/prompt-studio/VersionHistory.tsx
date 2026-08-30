@@ -51,7 +51,9 @@ export function VersionHistory({ promptId, currentVersion, onRevert }: VersionHi
 
     try {
       setLoading(true);
-      const response = await fetch(`/api/prompts/${promptId}/versions`);
+      const response = await fetch(`/api/prompts/${promptId}/versions`, {
+        credentials: 'include',
+      });
       const data = await response.json();
 
       if (response.ok) {
@@ -73,6 +75,7 @@ export function VersionHistory({ promptId, currentVersion, onRevert }: VersionHi
       setReverting(version.id);
       const response = await fetch(`/api/prompts/${promptId}/versions/${version.id}/revert`, {
         method: 'POST',
+        credentials: 'include',
       });
       const data = await response.json();
 

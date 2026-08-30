@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -11,6 +12,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { 
   ArrowLeft,
@@ -28,11 +36,75 @@ import {
   Eye,
   EyeOff,
   Plus,
-  AlertTriangle
+  AlertTriangle,
+  Loader2,
+  Users
 } from 'lucide-react';
+
+interface ApiKeyRecord {
+  id: string;
+  name: string;
+  keyPrefix: string;
+  permissions: string[];
+  lastUsedAt?: string | null;
+  createdAt?: string | null;
+}
+
+interface TeamMemberRecord {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  avatarUrl?: string | null;
+}
+
+interface ProfileRecord {
+  first_name?: string | null;
+  last_name?: string | null;
+  email?: string;
+  company?: string | null;
+  bio?: string | null;
+  timezone?: string | null;
+  avatar_url?: string | null;
+}
+
+interface SubscriptionRecord {
+  plan_name?: string | null;
+  status?: string | null;
+  current_period_end?: string | null;
+}
+
+interface DomainSettings {
+  vanitySubdomain: string | null;
+  customDomain: string | null;
+  customDomainVerified: boolean;
+  verificationToken: string | null;
+  txtVerificationHost: string | null;
+  baseDomain: string;
+  cnameTarget: string;
+  previews: {
+    production: string;
+    staging: string;
+    development: string;
+  } | null;
+}
 
 export default function SettingsPage() {
   const [showApiKey, setShowApiKey] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [apiKeys, setApiKeys] = useState<ApiKeyRecord[]>([]);
+  const [teamMembers, setTeamMembers] = useState<TeamMemberRecord[]>([]);
+  const [profile, setProfile] = useState<ProfileRecord | null>(null);
+  const [userEmail, setUserEmail] = useState('');
+  const [userName, setUserName] = useState('');
+  const [subscription, setSubscription] = useState<SubscriptionRecord | null>(null);
+  const [domains, setDomains] = useState<DomainSettings | null>(null);
+  const [vanitySubdomainInput, setVanitySubdomainInput] = useState('');
+  const [customDomainInput, setCustomDomainInput] = useState('');
+  const [savingDomains, setSavingDomains] = useState(false);
+  const [verifyingDns, setVerifyingDns] = useState(false);
+  const [creatingApiKey, setCreatingApiKey] = useState(false);
+  const [newApiKey, setNewApiKey] = useState<string | null>(null);
   const [notifications, setNotifications] = useState({
     email: true,
     push: false,
@@ -41,39 +113,214 @@ export default function SettingsPage() {
     marketing: false
   });
 
-  const apiKeys = [
-    {
-      id: '1',
-      name: 'Production API Key',
-      key: 'pp_live_1234567890abcdef',
-      created: '2024-01-15',
-      lastUsed: '2 hours ago',
-      permissions: ['read', 'write']
-    },
-    {
-      id: '2',
-      name: 'Development API Key',
-      key: 'pp_test_abcdef1234567890',
-      created: '2024-01-10',
-      lastUsed: '1 day ago',
-      permissions: ['read']
+  useEffect(() => {
+    async function loadSettings() {
+      try {
+        setLoading(true);
+        const response = await fetch('/api/settings', { credentials: 'include' });
+        const data = await response.json();
+
+        if (response.ok) {
+          setApiKeys(data.apiKeys || []);
+          setTeamMembers(data.teamMembers || []);
+          setProfile(data.profile || null);
+          setSubscription(data.subscription || null);
+          setUserEmail(data.user?.email || '');
+          setUserName(data.user?.name || '');
+        }
+
+        const domainsResponse = await fetch('/api/organizations/domains', {
+          credentials: 'include',
+        });
+        const domainsData = await domainsResponse.json();
+        if (domainsResponse.ok) {
+          setDomains({
+            vanitySubdomain: domainsData.organization?.vanitySubdomain || null,
+            customDomain: domainsData.organization?.customDomain || null,
+            customDomainVerified: domainsData.organization?.customDomainVerified || false,
+            verificationToken: domainsData.organization?.verificationToken || null,
+            txtVerificationHost: domainsData.organization?.txtVerificationHost || null,
+            baseDomain: domainsData.baseDomain,
+            cnameTarget: domainsData.cnameTarget,
+            previews: domainsData.previews || null,
+          });
+          setVanitySubdomainInput(domainsData.organization?.vanitySubdomain || '');
+          setCustomDomainInput(domainsData.organization?.customDomain || '');
+        }
+      } finally {
+        setLoading(false);
+      }
     }
-  ];
 
-  const billingHistory = [
-    { date: '2024-01-01', amount: '$99.00', status: 'paid', description: 'Professional Plan - January 2024' },
-    { date: '2023-12-01', amount: '$99.00', status: 'paid', description: 'Professional Plan - December 2023' },
-    { date: '2023-11-01', amount: '$99.00', status: 'paid', description: 'Professional Plan - November 2023' }
-  ];
+    loadSettings();
+  }, []);
 
-  const teamMembers = [
-    { name: 'John Doe', email: 'john@company.com', role: 'Owner', avatar: '/avatars/john.jpg' },
-    { name: 'Jane Smith', email: 'jane@company.com', role: 'Admin', avatar: '/avatars/jane.jpg' },
-    { name: 'Mike Johnson', email: 'mike@company.com', role: 'Developer', avatar: '/avatars/mike.jpg' }
-  ];
+  const saveVanitySubdomain = async () => {
+    setSavingDomains(true);
+    try {
+      const response = await fetch('/api/organizations/domains', {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vanity_subdomain: vanitySubdomainInput }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to save subdomain');
+
+      setDomains((current) =>
+        current
+          ? {
+              ...current,
+              vanitySubdomain: data.organization.vanitySubdomain,
+              previews: data.previews,
+            }
+          : current
+      );
+      toast.success('Vanity subdomain saved');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to save subdomain');
+    } finally {
+      setSavingDomains(false);
+    }
+  };
+
+  const saveCustomDomain = async () => {
+    setSavingDomains(true);
+    try {
+      const response = await fetch('/api/organizations/domains', {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          custom_domain: customDomainInput,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to save custom domain');
+
+      setDomains((current) =>
+        current
+          ? {
+              ...current,
+              customDomain: data.organization.customDomain,
+              customDomainVerified: data.organization.customDomainVerified,
+              verificationToken: data.organization.verificationToken,
+              txtVerificationHost: data.organization.txtVerificationHost,
+            }
+          : current
+      );
+      toast.success('Custom domain saved. Configure DNS, then verify.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to save custom domain');
+    } finally {
+      setSavingDomains(false);
+    }
+  };
+
+  const verifyCustomDomainDns = async () => {
+    setVerifyingDns(true);
+    try {
+      const response = await fetch('/api/organizations/domains/verify', {
+        method: 'POST',
+        credentials: 'include',
+      });
+      const data = await response.json();
+
+      if (response.ok && data.verified) {
+        setDomains((current) =>
+          current
+            ? { ...current, customDomainVerified: true }
+            : current
+        );
+        toast.success(`Domain verified via ${data.method?.toUpperCase() || 'DNS'}`);
+        return;
+      }
+
+      if (data.verification) {
+        setDomains((current) =>
+          current
+            ? {
+                ...current,
+                verificationToken: data.verification.txtValue,
+                txtVerificationHost: data.verification.txtHost,
+              }
+            : current
+        );
+      }
+
+      throw new Error(data.error || 'DNS verification failed');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'DNS verification failed');
+    } finally {
+      setVerifyingDns(false);
+    }
+  };
+
+  const createApiKey = async () => {
+    setCreatingApiKey(true);
+    try {
+      const response = await fetch('/api/api-keys', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'Production API Key' }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to create API key');
+
+      setNewApiKey(data.apiKey);
+      const keysResponse = await fetch('/api/api-keys', { credentials: 'include' });
+      const keysData = await keysResponse.json();
+      if (keysResponse.ok) {
+        setApiKeys(keysData.apiKeys || []);
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to create API key');
+    } finally {
+      setCreatingApiKey(false);
+    }
+  };
+
+  const profileInitials = [profile?.first_name, profile?.last_name]
+    .filter(Boolean)
+    .map((part) => String(part)[0])
+    .join('') || userName?.split(' ').map((part) => part[0]).join('') || userEmail?.[0]?.toUpperCase() || '?';
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <Dialog open={!!newApiKey} onOpenChange={(open) => !open && setNewApiKey(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Your new API key</DialogTitle>
+            <DialogDescription>
+              Copy this key now. It will not be shown again. Use it for production gateway requests.
+            </DialogDescription>
+          </DialogHeader>
+          {newApiKey && (
+            <code className="block break-all rounded bg-gray-100 p-3 text-sm">{newApiKey}</code>
+          )}
+          <Button
+            onClick={() => {
+              if (newApiKey) {
+                void navigator.clipboard.writeText(newApiKey);
+                toast.success('API key copied');
+              }
+            }}
+          >
+            <Copy className="w-4 h-4 mr-2" />
+            Copy key
+          </Button>
+        </DialogContent>
+      </Dialog>
+
       {/* Header */}
       <div className="bg-white border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -101,8 +348,9 @@ export default function SettingsPage() {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Tabs defaultValue="profile" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-6">
+          <TabsList className="grid w-full grid-cols-7">
             <TabsTrigger value="profile">Profile</TabsTrigger>
+            <TabsTrigger value="domains">Domains</TabsTrigger>
             <TabsTrigger value="api-keys">API Keys</TabsTrigger>
             <TabsTrigger value="notifications">Notifications</TabsTrigger>
             <TabsTrigger value="billing">Billing</TabsTrigger>
@@ -121,8 +369,8 @@ export default function SettingsPage() {
               <CardContent className="space-y-6">
                 <div className="flex items-center space-x-6">
                   <Avatar className="w-20 h-20">
-                    <AvatarImage src="/avatars/user.jpg" />
-                    <AvatarFallback>JD</AvatarFallback>
+                    <AvatarImage src={profile?.avatar_url || undefined} />
+                    <AvatarFallback>{profileInitials}</AvatarFallback>
                   </Avatar>
                   <div>
                     <Button variant="outline" size="sm">
@@ -138,19 +386,19 @@ export default function SettingsPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <Label htmlFor="first-name">First Name</Label>
-                    <Input id="first-name" defaultValue="John" className="mt-1" />
+                    <Input id="first-name" defaultValue={profile?.first_name || ''} className="mt-1" />
                   </div>
                   <div>
                     <Label htmlFor="last-name">Last Name</Label>
-                    <Input id="last-name" defaultValue="Doe" className="mt-1" />
+                    <Input id="last-name" defaultValue={profile?.last_name || ''} className="mt-1" />
                   </div>
                   <div>
                     <Label htmlFor="email">Email Address</Label>
-                    <Input id="email" type="email" defaultValue="john@company.com" className="mt-1" />
+                    <Input id="email" type="email" defaultValue={profile?.email || userEmail} className="mt-1" />
                   </div>
                   <div>
                     <Label htmlFor="company">Company</Label>
-                    <Input id="company" defaultValue="Acme Inc." className="mt-1" />
+                    <Input id="company" defaultValue={profile?.company || ''} className="mt-1" />
                   </div>
                 </div>
 
@@ -160,13 +408,13 @@ export default function SettingsPage() {
                     id="bio"
                     placeholder="Tell us about yourself..."
                     className="mt-1"
-                    defaultValue="Full-stack developer passionate about AI and automation."
+                    defaultValue={profile?.bio || ''}
                   />
                 </div>
 
                 <div>
                   <Label htmlFor="timezone">Timezone</Label>
-                  <Select defaultValue="utc-5">
+                  <Select defaultValue={profile?.timezone || 'utc+0'}>
                     <SelectTrigger className="mt-1">
                       <SelectValue />
                     </SelectTrigger>
@@ -216,14 +464,125 @@ export default function SettingsPage() {
             </Card>
           </TabsContent>
 
+          <TabsContent value="domains" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <Globe className="w-5 h-5 mr-2" />
+                  Vanity Subdomain
+                </CardTitle>
+                <CardDescription>
+                  Your assigned subdomain for multi-tenant API URLs.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <Label htmlFor="vanity-subdomain">Subdomain</Label>
+                  <div className="flex mt-1 gap-2">
+                    <Input
+                      id="vanity-subdomain"
+                      value={vanitySubdomainInput}
+                      onChange={(e) => setVanitySubdomainInput(e.target.value)}
+                      placeholder="your-company"
+                    />
+                    <span className="flex items-center text-sm text-gray-500 whitespace-nowrap">
+                      .{domains?.baseDomain || 'api.promptpilot.com'}
+                    </span>
+                  </div>
+                  <p className="text-sm text-gray-500 mt-2">
+                    Production, staging, and development each get their own host under this subdomain.
+                  </p>
+                </div>
+                {domains?.previews && (
+                  <div className="rounded-lg bg-gray-50 p-4 space-y-2 text-sm">
+                    <p className="font-medium text-gray-900">Environment URLs</p>
+                    <p><span className="text-gray-500">Production:</span> {domains.previews.production}</p>
+                    <p><span className="text-gray-500">Staging:</span> {domains.previews.staging}</p>
+                    <p><span className="text-gray-500">Development:</span> {domains.previews.development}</p>
+                  </div>
+                )}
+                <Button onClick={() => void saveVanitySubdomain()} disabled={savingDomains}>
+                  {savingDomains ? 'Saving...' : 'Save Subdomain'}
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Custom Domain</CardTitle>
+                <CardDescription>
+                  Bring your own domain for production deployments.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <Label htmlFor="custom-domain">Domain</Label>
+                  <Input
+                    id="custom-domain"
+                    value={customDomainInput}
+                    onChange={(e) => setCustomDomainInput(e.target.value)}
+                    placeholder="api.yourcompany.com"
+                    className="mt-1"
+                  />
+                </div>
+                {customDomainInput && (
+                  <div className="rounded-lg border p-4 text-sm space-y-3">
+                    <p className="font-medium">DNS setup (choose one)</p>
+                    <div>
+                      <p className="text-gray-600 font-medium">Option 1 — TXT verification</p>
+                      <p className="text-gray-600 mt-1">
+                        Host: <code>{domains?.txtVerificationHost || `_promptpilot.${customDomainInput}`}</code>
+                      </p>
+                      <p className="text-gray-600">
+                        Value: <code>{domains?.verificationToken || 'Save domain to generate token'}</code>
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-gray-600 font-medium">Option 2 — CNAME</p>
+                      <p className="text-gray-600 mt-1">
+                        Point <code>{customDomainInput}</code> CNAME to{' '}
+                        <code>{domains?.cnameTarget || 'cname.api.promptpilot.com'}</code>
+                      </p>
+                    </div>
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => void saveCustomDomain()}
+                    disabled={savingDomains}
+                  >
+                    Save Domain
+                  </Button>
+                  <Button
+                    onClick={() => void verifyCustomDomainDns()}
+                    disabled={verifyingDns || !customDomainInput}
+                  >
+                    {verifyingDns ? 'Checking DNS...' : 'Verify DNS'}
+                  </Button>
+                </div>
+                {domains?.customDomainVerified && domains.customDomain && (
+                  <Badge className="bg-green-100 text-green-800">
+                    Verified: {domains.customDomain}
+                  </Badge>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
           <TabsContent value="api-keys" className="space-y-6">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center justify-between">
                   API Keys
-                  <Button size="sm" className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700">
+                  <Button
+                    size="sm"
+                    className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
+                    onClick={() => void createApiKey()}
+                    disabled={creatingApiKey}
+                  >
                     <Plus className="w-4 h-4 mr-2" />
-                    Create New Key
+                    {creatingApiKey ? 'Creating...' : 'Create New Key'}
                   </Button>
                 </CardTitle>
                 <CardDescription>
@@ -232,7 +591,13 @@ export default function SettingsPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {apiKeys.map((apiKey) => (
+                  {apiKeys.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      <Key className="w-10 h-10 mx-auto mb-3 text-gray-300" />
+                      <p>No API keys yet. Create one to access Prompt Pilot programmatically.</p>
+                    </div>
+                  ) : (
+                    apiKeys.map((apiKey) => (
                     <div key={apiKey.id} className="flex items-center justify-between p-4 border rounded-lg">
                       <div className="flex-1">
                         <div className="flex items-center space-x-3 mb-2">
@@ -247,7 +612,7 @@ export default function SettingsPage() {
                         </div>
                         <div className="flex items-center space-x-2 mb-2">
                           <code className="text-sm bg-gray-100 px-2 py-1 rounded font-mono">
-                            {showApiKey ? apiKey.key : apiKey.key.replace(/./g, '•').slice(0, 20) + '...'}
+                            {showApiKey ? apiKey.keyPrefix : `${apiKey.keyPrefix}${'•'.repeat(12)}`}
                           </code>
                           <Button
                             size="sm"
@@ -261,9 +626,13 @@ export default function SettingsPage() {
                           </Button>
                         </div>
                         <div className="flex items-center space-x-4 text-sm text-gray-500">
-                          <span>Created {apiKey.created}</span>
-                          <span>•</span>
-                          <span>Last used {apiKey.lastUsed}</span>
+                          {apiKey.createdAt && <span>Created {new Date(apiKey.createdAt).toLocaleDateString()}</span>}
+                          {apiKey.lastUsedAt && (
+                            <>
+                              <span>•</span>
+                              <span>Last used {new Date(apiKey.lastUsedAt).toLocaleDateString()}</span>
+                            </>
+                          )}
                         </div>
                       </div>
                       <div className="flex items-center space-x-2">
@@ -275,7 +644,7 @@ export default function SettingsPage() {
                         </Button>
                       </div>
                     </div>
-                  ))}
+                  )))}
                 </div>
               </CardContent>
             </Card>
@@ -306,8 +675,11 @@ export default function SettingsPage() {
                   <div className="flex items-start space-x-3">
                     <Globe className="w-5 h-5 text-purple-600 mt-0.5" />
                     <div>
-                      <h4 className="font-medium text-gray-900">Rotate keys regularly</h4>
-                      <p className="text-sm text-gray-600">Create new keys and delete old ones periodically for better security.</p>
+                      <h4 className="font-medium text-gray-900">Production gateway auth</h4>
+                      <p className="text-sm text-gray-600">
+                        Pass your key as <code>Authorization: Bearer pp_live_...</code> or{' '}
+                        <code>X-API-Key</code> when calling production deployment URLs.
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -427,20 +799,28 @@ export default function SettingsPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
+                {subscription ? (
                 <div className="flex items-center justify-between p-6 bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg">
                   <div>
-                    <h3 className="text-lg font-semibold text-gray-900">Professional Plan</h3>
-                    <p className="text-gray-600">25 APIs • 100K API calls/month • Priority support</p>
-                    <p className="text-sm text-gray-500 mt-1">Next billing date: February 1, 2024</p>
+                    <h3 className="text-lg font-semibold text-gray-900">
+                      {String(subscription.plan_name || subscription.status || 'Active Plan')}
+                    </h3>
+                    {subscription.current_period_end && (
+                      <p className="text-sm text-gray-500 mt-1">
+                        Current period ends: {new Date(String(subscription.current_period_end)).toLocaleDateString()}
+                      </p>
+                    )}
                   </div>
                   <div className="text-right">
-                    <div className="text-2xl font-bold text-gray-900">$99</div>
-                    <div className="text-sm text-gray-500">per month</div>
-                    <Button size="sm" variant="outline" className="mt-2">
-                      Change Plan
-                    </Button>
+                    <Badge variant="outline">{String(subscription.status || 'active')}</Badge>
                   </div>
                 </div>
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    <CreditCard className="w-10 h-10 mx-auto mb-3 text-gray-300" />
+                    <p>No active subscription. Billing will appear here once you subscribe to a plan.</p>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -452,17 +832,9 @@ export default function SettingsPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="flex items-center justify-between p-4 border rounded-lg">
-                  <div className="flex items-center space-x-3">
-                    <CreditCard className="w-8 h-8 text-gray-400" />
-                    <div>
-                      <p className="font-medium text-gray-900">•••• •••• •••• 4242</p>
-                      <p className="text-sm text-gray-500">Expires 12/2025</p>
-                    </div>
-                  </div>
-                  <Button size="sm" variant="outline">
-                    Update
-                  </Button>
+                <div className="text-center py-8 text-gray-500">
+                  <CreditCard className="w-10 h-10 mx-auto mb-3 text-gray-300" />
+                  <p>No payment method on file.</p>
                 </div>
               </CardContent>
             </Card>
@@ -475,24 +847,8 @@ export default function SettingsPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-3">
-                  {billingHistory.map((invoice, index) => (
-                    <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
-                      <div>
-                        <p className="font-medium text-gray-900">{invoice.description}</p>
-                        <p className="text-sm text-gray-500">{invoice.date}</p>
-                      </div>
-                      <div className="flex items-center space-x-3">
-                        <Badge className="bg-green-100 text-green-800">
-                          {invoice.status}
-                        </Badge>
-                        <span className="font-medium text-gray-900">{invoice.amount}</span>
-                        <Button size="sm" variant="ghost">
-                          Download
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
+                <div className="text-center py-8 text-gray-500">
+                  <p>No billing history yet.</p>
                 </div>
               </CardContent>
             </Card>
@@ -505,34 +861,8 @@ export default function SettingsPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-gray-900">API Calls</span>
-                      <span className="text-sm text-gray-500">24,567 / 100,000</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div className="bg-blue-600 h-2 rounded-full" style={{ width: '24.6%' }} />
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-gray-900">Active APIs</span>
-                      <span className="text-sm text-gray-500">12 / 25</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div className="bg-green-600 h-2 rounded-full" style={{ width: '48%' }} />
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-gray-900">Storage</span>
-                      <span className="text-sm text-gray-500">2.3 GB / 10 GB</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div className="bg-purple-600 h-2 rounded-full" style={{ width: '23%' }} />
-                    </div>
-                  </div>
+                <div className="text-center py-8 text-gray-500">
+                  <p>Usage metrics will appear here once you start using the platform.</p>
                 </div>
               </CardContent>
             </Card>
@@ -554,11 +884,17 @@ export default function SettingsPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {teamMembers.map((member, index) => (
-                    <div key={index} className="flex items-center justify-between p-4 border rounded-lg">
+                  {teamMembers.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      <Users className="w-10 h-10 mx-auto mb-3 text-gray-300" />
+                      <p>No team members yet. Invite colleagues to collaborate.</p>
+                    </div>
+                  ) : (
+                    teamMembers.map((member) => (
+                    <div key={member.id} className="flex items-center justify-between p-4 border rounded-lg">
                       <div className="flex items-center space-x-3">
                         <Avatar>
-                          <AvatarImage src={member.avatar} />
+                          <AvatarImage src={member.avatarUrl || undefined} />
                           <AvatarFallback>{member.name.split(' ').map(n => n[0]).join('')}</AvatarFallback>
                         </Avatar>
                         <div>
@@ -568,14 +904,14 @@ export default function SettingsPage() {
                       </div>
                       <div className="flex items-center space-x-3">
                         <Badge variant="outline">{member.role}</Badge>
-                        {member.role !== 'Owner' && (
+                        {member.role !== 'owner' && member.role !== 'Owner' && (
                           <Button size="sm" variant="outline" className="text-red-600 hover:text-red-700">
                             Remove
                           </Button>
                         )}
                       </div>
                     </div>
-                  ))}
+                  )))}
                 </div>
               </CardContent>
             </Card>
@@ -681,29 +1017,8 @@ export default function SettingsPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-3">
-                  {[
-                    { device: 'MacBook Pro', location: 'San Francisco, CA', current: true, lastActive: 'Active now' },
-                    { device: 'iPhone 15', location: 'San Francisco, CA', current: false, lastActive: '2 hours ago' },
-                    { device: 'Chrome on Windows', location: 'New York, NY', current: false, lastActive: '1 day ago' }
-                  ].map((session, index) => (
-                    <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
-                      <div>
-                        <div className="flex items-center space-x-2">
-                          <p className="font-medium text-gray-900">{session.device}</p>
-                          {session.current && (
-                            <Badge className="bg-green-100 text-green-800">Current</Badge>
-                          )}
-                        </div>
-                        <p className="text-sm text-gray-500">{session.location} • {session.lastActive}</p>
-                      </div>
-                      {!session.current && (
-                        <Button size="sm" variant="outline" className="text-red-600 hover:text-red-700">
-                          Revoke
-                        </Button>
-                      )}
-                    </div>
-                  ))}
+                <div className="text-center py-8 text-gray-500">
+                  <p>No active sessions to display.</p>
                 </div>
               </CardContent>
             </Card>

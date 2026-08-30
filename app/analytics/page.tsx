@@ -93,7 +93,8 @@ export default function Analytics() {
     try {
       setLoading(true);
       const response = await fetch(
-        `/api/analytics?timeRange=${timeRange}`
+        `/api/analytics?timeRange=${timeRange}`,
+        { credentials: 'include' }
       );
       const result = await response.json();
 
