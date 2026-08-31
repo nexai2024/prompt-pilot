@@ -5,9 +5,10 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { History, RotateCcw, Clock, User, Check } from 'lucide-react';
+import { History, RotateCcw, Clock, User, Check, GitCompare } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
+import { VersionDiff } from '@/components/prompt-studio/VersionDiff';
 
 interface PromptVersion {
   id: string;
@@ -39,6 +40,7 @@ export function VersionHistory({ promptId, currentVersion, onRevert }: VersionHi
   const [versions, setVersions] = useState<PromptVersion[]>([]);
   const [loading, setLoading] = useState(false);
   const [reverting, setReverting] = useState<string | null>(null);
+  const [compareVersionId, setCompareVersionId] = useState<string | null>(null);
 
   useEffect(() => {
     if (promptId) {
@@ -163,15 +165,29 @@ export function VersionHistory({ promptId, currentVersion, onRevert }: VersionHi
                         )}
                       </div>
                       {!isCurrent && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleRevert(version)}
-                          disabled={reverting !== null}
-                        >
-                          <RotateCcw className="h-3 w-3 mr-1" />
-                          {reverting === version.id ? 'Reverting...' : 'Revert'}
-                        </Button>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              setCompareVersionId(
+                                compareVersionId === version.id ? null : version.id
+                              )
+                            }
+                          >
+                            <GitCompare className="h-3 w-3 mr-1" />
+                            {compareVersionId === version.id ? 'Hide diff' : 'Compare'}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleRevert(version)}
+                            disabled={reverting !== null}
+                          >
+                            <RotateCcw className="h-3 w-3 mr-1" />
+                            {reverting === version.id ? 'Reverting...' : 'Revert'}
+                          </Button>
+                        </div>
                       )}
                     </div>
                     <div className="space-y-2 text-sm">
@@ -197,6 +213,16 @@ export function VersionHistory({ promptId, currentVersion, onRevert }: VersionHi
                         {version.content.substring(0, 150)}
                         {version.content.length > 150 && '...'}
                       </div>
+                      {compareVersionId === version.id && (
+                        <div className="mt-3">
+                          <VersionDiff
+                            leftLabel={`v${version.version_number}`}
+                            rightLabel="Current editor"
+                            leftContent={version.content}
+                            rightContent={currentVersion.content}
+                          />
+                        </div>
+                      )}
                     </div>
                   </div>
                 );

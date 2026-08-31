@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,6 +16,7 @@ import { ArrowLeft, Play, Save, Settings, Brain, Zap, Plus, Copy, Trash2, Edit, 
 import { toast } from 'sonner';
 import { VersionHistory } from '@/components/prompt-studio/VersionHistory';
 import { PromptAssistPanel } from '@/components/prompt-studio/PromptAssistPanel';
+import { PromptScorePanel } from '@/components/prompt-studio/PromptScorePanel';
 
 interface Variable {
   id?: string;
@@ -43,7 +45,23 @@ interface Prompt {
   updated_at: string;
 }
 
-export default function PromptStudio() {
+export default function PromptStudioPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center">
+          <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
+        </div>
+      }
+    >
+      <PromptStudio />
+    </Suspense>
+  );
+}
+
+function PromptStudio() {
+  const searchParams = useSearchParams();
+  const importInputRef = useRef<HTMLInputElement>(null);
   // Prompt state
   const [promptId, setPromptId] = useState<string | null>(null);
   const [promptName, setPromptName] = useState('');
@@ -67,6 +85,7 @@ export default function PromptStudio() {
   const [isTesting, setIsTesting] = useState(false);
   const [recentPrompts, setRecentPrompts] = useState<Prompt[]>([]);
   const [loadingPrompts, setLoadingPrompts] = useState(true);
+  const [scoreEnhanceGoals, setScoreEnhanceGoals] = useState<string | null>(null);
 
   // Load recent prompts
   useEffect(() => {
@@ -176,6 +195,25 @@ export default function PromptStudio() {
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    const promptParam = searchParams.get('promptId') || searchParams.get('prompt');
+    if (!promptParam) return;
+
+    void (async () => {
+      try {
+        setIsLoading(true);
+        const response = await fetch(`/api/prompts/${promptParam}`, { credentials: 'include' });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Failed to load prompt');
+        await loadPrompt(data.prompt as Prompt);
+      } catch {
+        toast.error('Failed to load prompt from URL');
+      } finally {
+        setIsLoading(false);
+      }
+    })();
+  }, [searchParams]);
 
   const savePrompt = async () => {
     if (!promptName.trim()) {
@@ -335,6 +373,16 @@ export default function PromptStudio() {
     }
   };
 
+  const duplicatePrompt = () => {
+    if (!prompt.trim() && !promptName.trim()) {
+      toast.error('Nothing to duplicate');
+      return;
+    }
+    setPromptId(null);
+    setPromptName(promptName ? `${promptName} (copy)` : 'Untitled Prompt (copy)');
+    toast.success('Prompt duplicated — save to create a new copy');
+  };
+
   const newPrompt = () => {
     setPromptId(null);
     setPromptName('');
@@ -347,6 +395,74 @@ export default function PromptStudio() {
     setMaxTokens(150);
     setResponseFormat('text');
     toast.success('New prompt created');
+  };
+
+  const exportPrompt = () => {
+    if (!prompt.trim() && !promptName.trim()) {
+      toast.error('Nothing to export');
+      return;
+    }
+
+    const bundle = {
+      version: 1,
+      exported_at: new Date().toISOString(),
+      name: promptName,
+      description: promptDescription,
+      content: prompt,
+      model: selectedModel,
+      temperature,
+      max_tokens: maxTokens,
+      response_format: responseFormat,
+      streaming,
+      content_filtering: contentFiltering,
+      caching,
+      variables,
+    };
+
+    const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${promptName.trim() || 'prompt'}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    toast.success('Prompt exported');
+  };
+
+  const importPromptFile = async (file: File) => {
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text) as Record<string, unknown>;
+
+      setPromptId(null);
+      setPromptName(String(data.name || 'Imported Prompt'));
+      setPromptDescription(String(data.description || ''));
+      setPrompt(String(data.content || ''));
+      setSelectedModel(String(data.model || 'gpt-4'));
+      setTemperature(Number(data.temperature ?? 0.7));
+      setMaxTokens(Number(data.max_tokens ?? 150));
+      setResponseFormat(String(data.response_format || 'text'));
+      setStreaming(Boolean(data.streaming));
+      setContentFiltering(data.content_filtering !== false);
+      setCaching(data.caching !== false);
+
+      if (Array.isArray(data.variables)) {
+        setVariables(
+          data.variables.map((v: Record<string, unknown>) => ({
+            name: String(v.name || ''),
+            value: String(v.value || ''),
+            type: String(v.type || 'string'),
+            description: String(v.description || ''),
+            default_value: v.default_value ? String(v.default_value) : undefined,
+            required: v.required !== false,
+          }))
+        );
+      }
+
+      toast.success('Prompt imported — save to persist');
+    } catch {
+      toast.error('Invalid prompt JSON file');
+    }
   };
 
   return (
@@ -375,6 +491,42 @@ export default function PromptStudio() {
               </div>
             </div>
             <div className="flex items-center space-x-3">
+              <input
+                ref={importInputRef}
+                type="file"
+                accept="application/json,.json"
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) void importPromptFile(file);
+                  event.target.value = '';
+                }}
+              />
+              <Button variant="outline" size="sm" className="hidden sm:flex" onClick={exportPrompt}>
+                <Download className="w-4 h-4 mr-2" />
+                Export
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="hidden sm:flex"
+                onClick={() => importInputRef.current?.click()}
+              >
+                <Upload className="w-4 h-4 mr-2" />
+                Import
+              </Button>
+              <Button variant="outline" size="sm" className="hidden sm:flex" onClick={duplicatePrompt}>
+                <Copy className="w-4 h-4 mr-2" />
+                Duplicate
+              </Button>
+              {promptId && (
+                <Button variant="outline" size="sm" className="hidden sm:flex" asChild>
+                  <Link href={`/api-designer?promptId=${promptId}`}>
+                    <Code className="w-4 h-4 mr-2" />
+                    Design API
+                  </Link>
+                </Button>
+              )}
               <Button variant="outline" size="sm" className="hidden sm:flex" onClick={newPrompt}>
                 <Plus className="w-4 h-4 mr-2" />
                 New Prompt
@@ -442,8 +594,9 @@ export default function PromptStudio() {
           {/* Main Content */}
           <div className="lg:col-span-3">
             <Tabs defaultValue="editor" className="space-y-6">
-              <TabsList className="grid w-full grid-cols-4 bg-gray-100 p-1 rounded-xl">
+              <TabsList className="grid w-full grid-cols-5 bg-gray-100 p-1 rounded-xl">
                 <TabsTrigger value="editor" className="rounded-lg">Prompt Editor</TabsTrigger>
+                <TabsTrigger value="score" className="rounded-lg">AI Score</TabsTrigger>
                 <TabsTrigger value="test" className="rounded-lg">Test & Debug</TabsTrigger>
                 <TabsTrigger value="settings" className="rounded-lg">Model Settings</TabsTrigger>
                 <TabsTrigger value="history" className="rounded-lg">Version History</TabsTrigger>
@@ -486,6 +639,8 @@ export default function PromptStudio() {
                       <PromptAssistPanel
                         prompt={prompt}
                         promptId={promptId}
+                        externalEnhanceGoals={scoreEnhanceGoals}
+                        onExternalEnhanceConsumed={() => setScoreEnhanceGoals(null)}
                         onApplyGenerate={({ prompt: newPrompt, name, description, variables: newVars }) => {
                           setPrompt(newPrompt);
                           if (name) setPromptName(name);
@@ -591,6 +746,16 @@ export default function PromptStudio() {
                     )}
                   </CardContent>
                 </Card>
+              </TabsContent>
+
+              <TabsContent value="score" className="space-y-6">
+                <PromptScorePanel
+                  prompt={prompt}
+                  promptName={promptName}
+                  promptDescription={promptDescription}
+                  promptId={promptId}
+                  onApplySuggestions={(goals) => setScoreEnhanceGoals(goals)}
+                />
               </TabsContent>
 
               <TabsContent value="test" className="space-y-6">

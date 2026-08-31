@@ -404,7 +404,7 @@ export default function APIDesigner() {
     custom = useCustomDomain
   ) => {
     if (!orgDomains?.vanitySubdomain) {
-      return `https://api.promptpilot.com${endpointPath.startsWith('/') ? endpointPath : `/${endpointPath}`}`;
+      return `https://beta.promptpilot.run${endpointPath.startsWith('/') ? endpointPath : `/${endpointPath}`}`;
     }
     return buildDeploymentUrl({
       path: endpointPath,

@@ -8,6 +8,10 @@ import {
   toPublicRecords,
 } from '@/lib/ncb-server';
 import { generateApiKey } from '@/lib/api-key-auth';
+import {
+  formatApiKeyPermissionsForNcb,
+  parseApiKeyPermissions,
+} from '@/lib/api-key-utils';
 
 export async function GET(req: NextRequest) {
   try {
@@ -26,9 +30,7 @@ export async function GET(req: NextRequest) {
       id: key.id,
       name: key.name,
       keyPrefix: key.key_prefix,
-      permissions: key.permissions
-        ? String(key.permissions).split(',').map((p) => p.trim()).filter(Boolean)
-        : [],
+      permissions: parseApiKeyPermissions(key.permissions),
       lastUsedAt: key.last_used_at,
       expiresAt: key.expires_at,
       isActive: key.is_active === 1 || key.is_active === true,
@@ -66,7 +68,7 @@ export async function POST(req: NextRequest) {
       name,
       key_hash: hash,
       key_prefix: prefix,
-      permissions: 'read,write',
+      permissions: formatApiKeyPermissionsForNcb(['read', 'write']),
       is_active: 1,
       created_at: now,
       user_id: user.id,

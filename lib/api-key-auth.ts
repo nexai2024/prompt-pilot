@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from 'crypto';
+import { apiKeyHasPermission } from './api-key-utils';
 import { ncbRead, ncbUpdate, type NcbRecord } from './ncb-server';
 
 const API_KEY_PREFIX = 'pp_live_';
@@ -43,15 +44,6 @@ function isKeyActive(record: NcbRecord): boolean {
   return true;
 }
 
-function keyHasPermission(record: NcbRecord, permission: string): boolean {
-  const permissions = String(record.permissions || 'read')
-    .split(',')
-    .map((value) => value.trim())
-    .filter(Boolean);
-
-  return permissions.includes(permission) || permissions.includes('write');
-}
-
 export async function verifyApiKeyForOrganization(
   apiKey: string,
   organizationId: string,
@@ -71,7 +63,7 @@ export async function verifyApiKeyForOrganization(
     (record) =>
       String(record.key_hash) === hash &&
       isKeyActive(record) &&
-      keyHasPermission(record, requiredPermission)
+      apiKeyHasPermission(record.permissions, requiredPermission)
   );
 
   return match ?? null;

@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { toast } from 'sonner';
 import {
   ArrowLeft,
   Rocket,
@@ -37,6 +38,13 @@ interface Deployment {
   error_message?: string | null;
 }
 
+interface HealthResult {
+  healthy: boolean;
+  statusCode: number;
+  latencyMs: number;
+  error?: string;
+}
+
 function formatDeployedAt(value?: string | null): string {
   if (!value) return 'Not deployed yet';
   const date = new Date(value);
@@ -51,6 +59,8 @@ export default function Deployments() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [environmentFilter, setEnvironmentFilter] = useState('all');
+  const [healthChecks, setHealthChecks] = useState<Record<string, HealthResult>>({});
+  const [checkingHealth, setCheckingHealth] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadDeployments() {
@@ -87,6 +97,37 @@ export default function Deployments() {
 
     loadDeployments();
   }, []);
+
+  const runHealthCheck = async (deploymentId: string) => {
+    setCheckingHealth(deploymentId);
+    try {
+      const response = await fetch(`/api/deployments/${deploymentId}/health`, {
+        credentials: 'include',
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Health check failed');
+
+      setHealthChecks((prev) => ({
+        ...prev,
+        [deploymentId]: {
+          healthy: Boolean(data.healthy),
+          statusCode: Number(data.statusCode ?? 0),
+          latencyMs: Number(data.latencyMs ?? 0),
+          error: data.error ? String(data.error) : undefined,
+        },
+      }));
+
+      toast[data.healthy ? 'success' : 'error'](
+        data.healthy
+          ? `Healthy (${data.latencyMs}ms)`
+          : data.error || `Unhealthy — HTTP ${data.statusCode}`
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Health check failed');
+    } finally {
+      setCheckingHealth(null);
+    }
+  };
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -308,6 +349,21 @@ export default function Deployments() {
                       <Button
                         size="sm"
                         variant="outline"
+                        onClick={() => void runHealthCheck(deployment.id)}
+                        disabled={checkingHealth === deployment.id}
+                      >
+                        {checkingHealth === deployment.id ? (
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        ) : (
+                          <Play className="w-4 h-4 mr-2" />
+                        )}
+                        Health Check
+                      </Button>
+                    )}
+                    {deployment.url && (
+                      <Button
+                        size="sm"
+                        variant="outline"
                         onClick={() => navigator.clipboard.writeText(deployment.url)}
                       >
                         <Copy className="w-4 h-4 mr-2" />
@@ -323,6 +379,31 @@ export default function Deployments() {
                     <code className="text-sm bg-gray-100 px-2 py-1 rounded font-mono">
                       {deployment.url}
                     </code>
+                  </div>
+                )}
+
+                {healthChecks[deployment.id] && (
+                  <div
+                    className={`mt-4 p-3 rounded-lg border ${
+                      healthChecks[deployment.id].healthy
+                        ? 'bg-green-50 border-green-200'
+                        : 'bg-amber-50 border-amber-200'
+                    }`}
+                  >
+                    <p className="text-sm">
+                      {healthChecks[deployment.id].healthy ? (
+                        <span className="text-green-800">
+                          Health check passed — HTTP {healthChecks[deployment.id].statusCode} in{' '}
+                          {healthChecks[deployment.id].latencyMs}ms
+                        </span>
+                      ) : (
+                        <span className="text-amber-800">
+                          Health check failed —{' '}
+                          {healthChecks[deployment.id].error ||
+                            `HTTP ${healthChecks[deployment.id].statusCode}`}
+                        </span>
+                      )}
+                    </p>
                   </div>
                 )}
 

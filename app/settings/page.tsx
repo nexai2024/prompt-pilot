@@ -74,6 +74,16 @@ interface SubscriptionRecord {
   current_period_end?: string | null;
 }
 
+interface DnsRecordInstructions {
+  type: string;
+  host: string;
+  hostRelative: string;
+  target?: string;
+  value?: string;
+  required?: boolean;
+  purpose?: string;
+}
+
 interface DomainSettings {
   vanitySubdomain: string | null;
   customDomain: string | null;
@@ -82,6 +92,11 @@ interface DomainSettings {
   txtVerificationHost: string | null;
   baseDomain: string;
   cnameTarget: string;
+  dns: {
+    domain: string;
+    cname: DnsRecordInstructions;
+    txt: DnsRecordInstructions;
+  } | null;
   previews: {
     production: string;
     staging: string;
@@ -103,8 +118,11 @@ export default function SettingsPage() {
   const [customDomainInput, setCustomDomainInput] = useState('');
   const [savingDomains, setSavingDomains] = useState(false);
   const [verifyingDns, setVerifyingDns] = useState(false);
+  const [dnsCheckStatus, setDnsCheckStatus] = useState<string | null>(null);
   const [creatingApiKey, setCreatingApiKey] = useState(false);
   const [newApiKey, setNewApiKey] = useState<string | null>(null);
+  const [newApiKeyName, setNewApiKeyName] = useState('Production API Key');
+  const [revokingKeyId, setRevokingKeyId] = useState<string | null>(null);
   const [notifications, setNotifications] = useState({
     email: true,
     push: false,
@@ -142,6 +160,7 @@ export default function SettingsPage() {
             txtVerificationHost: domainsData.organization?.txtVerificationHost || null,
             baseDomain: domainsData.baseDomain,
             cnameTarget: domainsData.cnameTarget,
+            dns: domainsData.dns || null,
             previews: domainsData.previews || null,
           });
           setVanitySubdomainInput(domainsData.organization?.vanitySubdomain || '');
@@ -206,6 +225,7 @@ export default function SettingsPage() {
               customDomainVerified: data.organization.customDomainVerified,
               verificationToken: data.organization.verificationToken,
               txtVerificationHost: data.organization.txtVerificationHost,
+              dns: data.dns || null,
             }
           : current
       );
@@ -214,6 +234,34 @@ export default function SettingsPage() {
       toast.error(error instanceof Error ? error.message : 'Failed to save custom domain');
     } finally {
       setSavingDomains(false);
+    }
+  };
+
+  const copyToClipboard = async (value: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success(`${label} copied`);
+    } catch {
+      toast.error('Could not copy to clipboard');
+    }
+  };
+
+  const checkDnsPropagation = async () => {
+    setDnsCheckStatus('Checking DNS records...');
+    try {
+      const response = await fetch('/api/tenant/context', {
+        method: 'POST',
+        credentials: 'include',
+      });
+      const data = await response.json();
+
+      if (data.verified) {
+        setDnsCheckStatus(`Found via ${data.method?.toUpperCase() || 'DNS'} — ready to verify`);
+      } else {
+        setDnsCheckStatus(data.error || 'Records not detected yet. Wait for propagation and try again.');
+      }
+    } catch {
+      setDnsCheckStatus('Could not check DNS status');
     }
   };
 
@@ -236,13 +284,14 @@ export default function SettingsPage() {
         return;
       }
 
-      if (data.verification) {
+      if (data.verification || data.dns) {
         setDomains((current) =>
           current
             ? {
                 ...current,
-                verificationToken: data.verification.txtValue,
-                txtVerificationHost: data.verification.txtHost,
+                dns: data.dns || current.dns,
+                verificationToken: data.verification?.txtValue || current.verificationToken,
+                txtVerificationHost: data.verification?.txtHost || current.txtVerificationHost,
               }
             : current
         );
@@ -263,7 +312,7 @@ export default function SettingsPage() {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: 'Production API Key' }),
+        body: JSON.stringify({ name: newApiKeyName.trim() || 'Production API Key' }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Failed to create API key');
@@ -278,6 +327,25 @@ export default function SettingsPage() {
       toast.error(error instanceof Error ? error.message : 'Failed to create API key');
     } finally {
       setCreatingApiKey(false);
+    }
+  };
+
+  const revokeApiKey = async (keyId: string) => {
+    setRevokingKeyId(keyId);
+    try {
+      const response = await fetch(`/api/api-keys/${keyId}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to revoke API key');
+
+      setApiKeys((keys) => keys.filter((key) => key.id !== keyId));
+      toast.success('API key revoked');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to revoke API key');
+    } finally {
+      setRevokingKeyId(null);
     }
   };
 
@@ -472,7 +540,7 @@ export default function SettingsPage() {
                   Vanity Subdomain
                 </CardTitle>
                 <CardDescription>
-                  Your assigned subdomain for multi-tenant API URLs.
+                  Your tenant workspace URL. After login you are redirected here automatically.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -486,10 +554,13 @@ export default function SettingsPage() {
                       placeholder="your-company"
                     />
                     <span className="flex items-center text-sm text-gray-500 whitespace-nowrap">
-                      .{domains?.baseDomain || 'api.promptpilot.com'}
+                      .{domains?.baseDomain || 'beta.promptpilot.run'}
                     </span>
                   </div>
                   <p className="text-sm text-gray-500 mt-2">
+                    App URL: <code>{domains?.previews?.production || `https://${vanitySubdomainInput}.${domains?.baseDomain || 'beta.promptpilot.run'}`}</code>
+                  </p>
+                  <p className="text-sm text-gray-500">
                     Production, staging, and development each get their own host under this subdomain.
                   </p>
                 </div>
@@ -525,28 +596,105 @@ export default function SettingsPage() {
                     className="mt-1"
                   />
                 </div>
-                {customDomainInput && (
-                  <div className="rounded-lg border p-4 text-sm space-y-3">
-                    <p className="font-medium">DNS setup (choose one)</p>
-                    <div>
-                      <p className="text-gray-600 font-medium">Option 1 — TXT verification</p>
-                      <p className="text-gray-600 mt-1">
-                        Host: <code>{domains?.txtVerificationHost || `_promptpilot.${customDomainInput}`}</code>
+                {customDomainInput && (domains?.dns || domains?.verificationToken) && (
+                  <div className="rounded-lg border p-4 text-sm space-y-4 bg-gray-50">
+                    <p className="font-medium text-gray-900">DNS records</p>
+                    <p className="text-gray-600 text-xs">
+                      Add these in your DNS provider. CNAME routes traffic; TXT proves ownership.
+                      Propagation can take up to 48 hours.
+                    </p>
+
+                    <div className="rounded-md border bg-white p-3 space-y-1">
+                      <p className="font-medium text-gray-800">
+                        1. CNAME <span className="text-red-600">*</span> (required for routing)
                       </p>
-                      <p className="text-gray-600">
-                        Value: <code>{domains?.verificationToken || 'Save domain to generate token'}</code>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs mt-2">
+                        <div>
+                          <span className="text-gray-500">Type</span>
+                          <p className="font-mono">CNAME</p>
+                        </div>
+                        <div>
+                          <span className="text-gray-500">Name / Host</span>
+                          <p className="font-mono break-all">
+                            {domains?.dns?.cname.hostRelative || customDomainInput.split('.')[0]}
+                          </p>
+                        </div>
+                        <div>
+                          <span className="text-gray-500">Target / Value</span>
+                          <p className="font-mono break-all">{domains?.cnameTarget}</p>
+                        </div>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-2">
+                        Full hostname: <code>{customDomainInput}</code> →{' '}
+                        <code>{domains?.cnameTarget}</code>
                       </p>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="mt-2 h-7 text-xs"
+                        onClick={() =>
+                          void copyToClipboard(domains?.cnameTarget || '', 'CNAME target')
+                        }
+                      >
+                        <Copy className="w-3 h-3 mr-1" />
+                        Copy target
+                      </Button>
                     </div>
-                    <div>
-                      <p className="text-gray-600 font-medium">Option 2 — CNAME</p>
-                      <p className="text-gray-600 mt-1">
-                        Point <code>{customDomainInput}</code> CNAME to{' '}
-                        <code>{domains?.cnameTarget || 'cname.api.promptpilot.com'}</code>
+
+                    <div className="rounded-md border bg-white p-3 space-y-1">
+                      <p className="font-medium text-gray-800">2. TXT (ownership verification)</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs mt-2">
+                        <div>
+                          <span className="text-gray-500">Type</span>
+                          <p className="font-mono">TXT</p>
+                        </div>
+                        <div>
+                          <span className="text-gray-500">Name / Host</span>
+                          <p className="font-mono break-all">
+                            {domains?.dns?.txt.hostRelative || '_promptpilot-challenge'}
+                          </p>
+                        </div>
+                        <div>
+                          <span className="text-gray-500">Value</span>
+                          <p className="font-mono break-all text-[11px]">
+                            {domains?.dns?.txt.value ||
+                              (domains?.verificationToken
+                                ? `promptpilot-site-verification=${domains.verificationToken}`
+                                : 'Save domain to generate')}
+                          </p>
+                        </div>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-2">
+                        FQDN: <code>{domains?.txtVerificationHost || `_promptpilot-challenge.${customDomainInput}`}</code>
                       </p>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="mt-2 h-7 text-xs"
+                        onClick={() =>
+                          void copyToClipboard(
+                            domains?.dns?.txt.value ||
+                              (domains?.verificationToken
+                                ? `promptpilot-site-verification=${domains.verificationToken}`
+                                : ''),
+                            'TXT value'
+                          )
+                        }
+                      >
+                        <Copy className="w-3 h-3 mr-1" />
+                        Copy TXT value
+                      </Button>
                     </div>
+
+                    <p className="text-xs text-gray-500">
+                      Either TXT or CNAME verification succeeds. CNAME is required for live API traffic
+                      on your custom domain.
+                    </p>
                   </div>
                 )}
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <Button
                     variant="outline"
                     onClick={() => void saveCustomDomain()}
@@ -555,12 +703,22 @@ export default function SettingsPage() {
                     Save Domain
                   </Button>
                   <Button
+                    variant="outline"
+                    onClick={() => void checkDnsPropagation()}
+                    disabled={!customDomainInput}
+                  >
+                    Check DNS
+                  </Button>
+                  <Button
                     onClick={() => void verifyCustomDomainDns()}
                     disabled={verifyingDns || !customDomainInput}
                   >
                     {verifyingDns ? 'Checking DNS...' : 'Verify DNS'}
                   </Button>
                 </div>
+                {dnsCheckStatus && (
+                  <p className="text-xs text-gray-600">{dnsCheckStatus}</p>
+                )}
                 {domains?.customDomainVerified && domains.customDomain && (
                   <Badge className="bg-green-100 text-green-800">
                     Verified: {domains.customDomain}
@@ -590,6 +748,14 @@ export default function SettingsPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
+                <div className="flex gap-2 mb-4">
+                  <Input
+                    value={newApiKeyName}
+                    onChange={(e) => setNewApiKeyName(e.target.value)}
+                    placeholder="Key name (e.g. Production API Key)"
+                    className="max-w-xs"
+                  />
+                </div>
                 <div className="space-y-4">
                   {apiKeys.length === 0 ? (
                     <div className="text-center py-8 text-gray-500">
@@ -636,10 +802,13 @@ export default function SettingsPage() {
                         </div>
                       </div>
                       <div className="flex items-center space-x-2">
-                        <Button size="sm" variant="outline">
-                          Edit
-                        </Button>
-                        <Button size="sm" variant="outline" className="text-red-600 hover:text-red-700">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-red-600 hover:text-red-700"
+                          disabled={revokingKeyId === apiKey.id}
+                          onClick={() => void revokeApiKey(apiKey.id)}
+                        >
                           <Trash2 className="w-4 h-4" />
                         </Button>
                       </div>

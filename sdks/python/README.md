@@ -105,7 +105,7 @@ except PromptPilotError as e:
 ```python
 client = PromptPilot(
     api_key="pp_live_xxx",
-    base_url="https://api.promptpilot.com",  # Optional: custom API URL
+    base_url="https://beta.promptpilot.run",  # Optional: custom API URL
     timeout=30  # Optional: request timeout in seconds
 )
 ```

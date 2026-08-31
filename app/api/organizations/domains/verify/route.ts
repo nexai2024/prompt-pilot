@@ -1,6 +1,9 @@
-import { randomUUID } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyCustomDomainDns, getTxtVerificationHost } from '@/lib/dns-verification';
+import {
+  buildDnsInstructions,
+  getTxtVerificationHost,
+  verifyCustomDomainDns,
+} from '@/lib/dns-verification';
 import {
   ensureDefaultOrganization,
   findByPublicId,
@@ -10,6 +13,7 @@ import {
   toPublicId,
 } from '@/lib/ncb-server';
 import { getCnameTarget } from '@/lib/tenant-domains';
+import { randomUUID } from 'crypto';
 
 export async function POST(req: NextRequest) {
   try {
@@ -44,6 +48,7 @@ export async function POST(req: NextRequest) {
     }
 
     const cnameTarget = getCnameTarget();
+    const dns = buildDnsInstructions(customDomain, verificationToken, cnameTarget);
     const result = await verifyCustomDomainDns({
       domain: customDomain,
       verificationToken,
@@ -55,10 +60,13 @@ export async function POST(req: NextRequest) {
         {
           verified: false,
           error: result.error,
+          method: null,
+          dns,
           verification: {
             domain: customDomain,
             txtHost: getTxtVerificationHost(customDomain),
-            txtValue: verificationToken,
+            txtValue: dns.txt.value,
+            cnameHost: customDomain,
             cnameTarget,
           },
         },
@@ -76,6 +84,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       verified: true,
       method: result.method,
+      dns,
       organization: {
         id: toPublicId(updated || org),
         customDomain,

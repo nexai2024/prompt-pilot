@@ -24,7 +24,37 @@ export const RESERVED_SUBDOMAINS = new Set([
 ]);
 
 export function getBaseDomain(): string {
-  return process.env.PROMPT_PILOT_BASE_DOMAIN || 'api.promptpilot.com';
+  return process.env.PROMPT_PILOT_BASE_DOMAIN || 'beta.promptpilot.run';
+}
+
+const LOCAL_DEV_HOSTS = new Set(['localhost', '127.0.0.1']);
+
+/** Hostnames that are the platform app — not vanity or custom tenant hosts. */
+export function isPlatformHostname(host: string): boolean {
+  const hostname = host.toLowerCase().split(':')[0];
+  if (!hostname) return false;
+  if (LOCAL_DEV_HOSTS.has(hostname)) return true;
+
+  const base = getBaseDomain().toLowerCase();
+  if (hostname === base || hostname === `www.${base}` || hostname === `app.${base}`) {
+    return true;
+  }
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+  if (appUrl) {
+    try {
+      if (hostname === new URL(appUrl).hostname.toLowerCase()) return true;
+    } catch {
+      // ignore invalid URL
+    }
+  }
+
+  const cnameTarget = getCnameTarget().toLowerCase();
+  if (hostname === cnameTarget || hostname === `cname.${base}`) {
+    return true;
+  }
+
+  return false;
 }
 
 export function getCnameTarget(): string {
@@ -120,6 +150,12 @@ export function parseTenantHost(host: string): ParsedTenantHost | null {
   if (!hostname) return null;
 
   const base = getBaseDomain();
+  const cnameTarget = getCnameTarget().toLowerCase();
+
+  // Infrastructure host — not a customer tenant
+  if (hostname === cnameTarget || hostname === `cname.${base}`) {
+    return { environment: 'production' };
+  }
 
   const stagingSuffix = `.staging.${base}`;
   if (hostname.endsWith(stagingSuffix)) {
@@ -145,10 +181,15 @@ export function parseTenantHost(host: string): ParsedTenantHost | null {
     }
   }
 
-  if (hostname === base) {
+  if (hostname === base || hostname === `www.${base}` || hostname === `app.${base}`) {
     return { environment: 'production' };
   }
 
+  if (isPlatformHostname(hostname)) {
+    return { environment: 'production' };
+  }
+
+  // Verified custom domains are resolved separately; treat unknown hosts as custom domain candidates
   return { customDomain: hostname, environment: 'production' };
 }
 

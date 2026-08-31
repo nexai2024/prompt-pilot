@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -49,6 +49,8 @@ interface EnhanceResult {
 interface PromptAssistPanelProps {
   prompt: string;
   promptId: string | null;
+  externalEnhanceGoals?: string | null;
+  onExternalEnhanceConsumed?: () => void;
   onApplyGenerate: (result: {
     prompt: string;
     name?: string;
@@ -73,6 +75,8 @@ function toVariables(
 export function PromptAssistPanel({
   prompt,
   promptId,
+  externalEnhanceGoals,
+  onExternalEnhanceConsumed,
   onApplyGenerate,
   onApplyEnhance,
 }: PromptAssistPanelProps) {
@@ -89,6 +93,13 @@ export function PromptAssistPanel({
   const [isEnhancing, setIsEnhancing] = useState(false);
   const [generateResult, setGenerateResult] = useState<GenerateResult | null>(null);
   const [enhanceResult, setEnhanceResult] = useState<EnhanceResult | null>(null);
+
+  useEffect(() => {
+    if (!externalEnhanceGoals?.trim()) return;
+    setEnhanceGoals(externalEnhanceGoals);
+    setEnhanceOpen(true);
+    onExternalEnhanceConsumed?.();
+  }, [externalEnhanceGoals, onExternalEnhanceConsumed]);
 
   const callAssist = async (payload: Record<string, unknown>) => {
     const response = await fetch('/api/llm/prompt-assist', {

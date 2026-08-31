@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
-import { getTxtVerificationHost } from '@/lib/dns-verification';
+import { buildDnsInstructions, getTxtVerificationHost } from '@/lib/dns-verification';
 import {
   ensureDefaultOrganization,
   findByPublicId,
@@ -18,6 +18,7 @@ import {
   validateCustomDomain,
   validateVanitySubdomain,
 } from '@/lib/tenant-domains';
+import { setTenantSubdomainCookie } from '@/lib/cookie-utils';
 
 export async function GET(req: NextRequest) {
   try {
@@ -41,7 +42,12 @@ export async function GET(req: NextRequest) {
       ? String(org.custom_domain_verification_token)
       : null;
 
-    return NextResponse.json({
+    const dns =
+      customDomain && verificationToken
+        ? buildDnsInstructions(customDomain, verificationToken, getCnameTarget())
+        : null;
+
+    const response = NextResponse.json({
       organization: {
         id: toPublicId(org),
         name: org.name,
@@ -56,6 +62,7 @@ export async function GET(req: NextRequest) {
       },
       baseDomain: getBaseDomain(),
       cnameTarget: getCnameTarget(),
+      dns,
       previews: vanitySubdomain
         ? {
             production: `https://${buildVanityHost(vanitySubdomain, 'production')}`,
@@ -64,6 +71,16 @@ export async function GET(req: NextRequest) {
           }
         : null,
     });
+
+    if (vanitySubdomain) {
+      const host =
+        req.headers.get('x-forwarded-host') ||
+        req.headers.get('host') ||
+        'localhost';
+      setTenantSubdomainCookie(response, vanitySubdomain, host);
+    }
+
+    return response;
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     const status = message === 'Unauthorized' ? 401 : 500;
@@ -170,24 +187,32 @@ export async function PATCH(req: NextRequest) {
     const vanitySubdomain = updated.vanity_subdomain
       ? String(updated.vanity_subdomain)
       : null;
+    const customDomainUpdated = updated.custom_domain
+      ? String(updated.custom_domain)
+      : null;
+    const tokenUpdated = updated.custom_domain_verification_token
+      ? String(updated.custom_domain_verification_token)
+      : null;
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       organization: {
         id: toPublicId(updated),
         name: updated.name,
         slug: updated.slug,
         vanitySubdomain,
-        customDomain: updated.custom_domain ? String(updated.custom_domain) : null,
+        customDomain: customDomainUpdated,
         customDomainVerified:
           updated.custom_domain_verified === 1 ||
           updated.custom_domain_verified === true,
-        verificationToken: updated.custom_domain_verification_token
-          ? String(updated.custom_domain_verification_token)
-          : null,
-        txtVerificationHost: updated.custom_domain
-          ? getTxtVerificationHost(String(updated.custom_domain))
+        verificationToken: tokenUpdated,
+        txtVerificationHost: customDomainUpdated
+          ? getTxtVerificationHost(customDomainUpdated)
           : null,
       },
+      dns:
+        customDomainUpdated && tokenUpdated
+          ? buildDnsInstructions(customDomainUpdated, tokenUpdated, getCnameTarget())
+          : null,
       previews: vanitySubdomain
         ? {
             production: `https://${buildVanityHost(vanitySubdomain, 'production')}`,
@@ -196,6 +221,16 @@ export async function PATCH(req: NextRequest) {
           }
         : null,
     });
+
+    if (vanitySubdomain) {
+      const host =
+        req.headers.get('x-forwarded-host') ||
+        req.headers.get('host') ||
+        'localhost';
+      setTenantSubdomainCookie(response, vanitySubdomain, host);
+    }
+
+    return response;
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     const status = message === 'Unauthorized' ? 401 : 500;

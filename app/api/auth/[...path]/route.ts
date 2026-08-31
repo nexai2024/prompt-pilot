@@ -99,10 +99,14 @@ async function proxy(req: NextRequest, path: string, body?: string) {
   });
 
   const cookies = res.headers.getSetCookie?.() || [];
+  const host =
+    req.headers.get('x-forwarded-host') ||
+    req.headers.get('host') ||
+    'localhost';
   for (const cookie of cookies) {
     response.headers.append(
       'Set-Cookie',
-      transformSetCookieForLocalhost(cookie)
+      transformSetCookieForLocalhost(cookie, host.split(':')[0])
     );
   }
 

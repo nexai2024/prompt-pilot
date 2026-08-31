@@ -5,14 +5,17 @@ import {
   GENERATE_USER_TEMPLATE,
   normalizeEnhancedResult,
   normalizeGeneratedResult,
+  normalizeScoreResult,
   parseAssistJson,
   PROMPT_ENGINEER_SYSTEM,
+  SCORE_USER_TEMPLATE,
 } from '@/lib/prompt-assist';
 import {
   getOrganizationMember,
   logApiCall,
   requireSession,
 } from '@/lib/ncb-server';
+import { savePromptScore } from '@/lib/prompt-score-storage';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || '',
@@ -60,13 +63,15 @@ export async function POST(req: NextRequest) {
 
     requestBody = await req.text();
     const body = JSON.parse(requestBody) as {
-      action: 'generate' | 'enhance';
+      action: 'generate' | 'enhance' | 'score';
       description?: string;
       prompt?: string;
       use_case?: string;
       tone?: string;
       output_format?: string;
       goals?: string;
+      prompt_name?: string;
+      prompt_description?: string;
       prompt_id?: string;
     };
 
@@ -191,8 +196,77 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(responsePayload);
     }
 
+    if (action === 'score') {
+      if (!body.prompt?.trim()) {
+        return NextResponse.json(
+          { error: 'Prompt content is required for scoring' },
+          { status: 400 }
+        );
+      }
+
+      const userMessage = SCORE_USER_TEMPLATE({
+        prompt: body.prompt.trim(),
+        name: body.prompt_name,
+        description: body.prompt_description,
+      });
+
+      const completion = await openai.chat.completions.create({
+        model: ASSIST_MODEL,
+        temperature: 0.3,
+        max_tokens: 2000,
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: PROMPT_ENGINEER_SYSTEM },
+          { role: 'user', content: userMessage },
+        ],
+      });
+
+      const raw = completion.choices[0]?.message?.content;
+      if (!raw) throw new Error('No response from AI');
+
+      const result = normalizeScoreResult(
+        parseAssistJson<Record<string, unknown>>(raw)
+      );
+
+      const usage = completion.usage || { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+      const latency_ms = Date.now() - startTime;
+      const cost_cents = estimateCostCents(usage.prompt_tokens, usage.completion_tokens);
+
+      const responsePayload = { ...result, latency_ms, tokens_used: usage.total_tokens, cost_cents };
+
+      let savedScore = null;
+      if (prompt_id) {
+        savedScore = await savePromptScore(cookieHeader, {
+          promptPublicId: prompt_id,
+          organizationId,
+          userId,
+          result,
+        });
+      }
+
+      await logApiCall(cookieHeader, userId, {
+        organization_id: organizationId,
+        method: 'POST',
+        path: logPath,
+        status_code: 200,
+        response_time_ms: latency_ms,
+        request_size_bytes: Buffer.byteLength(requestBody, 'utf8'),
+        response_size_bytes: Buffer.byteLength(JSON.stringify(responsePayload), 'utf8'),
+        user_agent: req.headers.get('user-agent') || undefined,
+        ip_address: getClientIp(req),
+        tokens_used: usage.total_tokens,
+        cost_cents,
+      });
+
+      return NextResponse.json({
+        ...responsePayload,
+        saved: Boolean(savedScore),
+        score_id: savedScore?.id ?? null,
+      });
+    }
+
     return NextResponse.json(
-      { error: 'Invalid action. Use "generate" or "enhance".' },
+      { error: 'Invalid action. Use "generate", "enhance", or "score".' },
       { status: 400 }
     );
   } catch (error) {

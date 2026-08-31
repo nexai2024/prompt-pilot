@@ -6,17 +6,27 @@ import {
   toPublicRecord,
   toPublicRecords,
 } from '@/lib/ncb-server';
+import { parseApiKeyPermissions } from '@/lib/api-key-utils';
 
 export async function GET(req: NextRequest) {
   try {
     const cookieHeader = req.headers.get('cookie') || '';
     const user = await requireSession(cookieHeader);
+    const orgMember = await getOrganizationMember(user.id, cookieHeader);
 
-    const [profiles, apiKeys, orgMember] = await Promise.all([
+    const [profiles, orgMemberResolved] = await Promise.all([
       ncbRead('profiles', cookieHeader, { user_id: user.id }),
-      ncbRead('api_keys', cookieHeader, { user_id: user.id, sort: 'created_at', order: 'desc' }),
-      getOrganizationMember(user.id, cookieHeader),
+      orgMember ?? Promise.resolve(null),
     ]);
+
+    let apiKeys: Array<Record<string, unknown>> = [];
+    if (orgMemberResolved?.organization_id) {
+      apiKeys = await ncbRead('api_keys', cookieHeader, {
+        organization_id: String(orgMemberResolved.organization_id),
+        sort: 'created_at',
+        order: 'desc',
+      });
+    }
 
     const profile = profiles[0] ? toPublicRecord(profiles[0]) : null;
 
@@ -24,8 +34,8 @@ export async function GET(req: NextRequest) {
     let subscription = null;
     let billingPlans: Array<Record<string, unknown>> = [];
 
-    if (orgMember?.organization_id) {
-      const orgId = String(orgMember.organization_id);
+    if (orgMemberResolved?.organization_id) {
+      const orgId = String(orgMemberResolved.organization_id);
 
       const [members, subscriptions, plans] = await Promise.all([
         ncbRead('organization_members', cookieHeader, { organization_id: orgId }),
@@ -61,9 +71,7 @@ export async function GET(req: NextRequest) {
       id: key.id,
       name: key.name,
       keyPrefix: key.key_prefix,
-      permissions: key.permissions
-        ? String(key.permissions).split(',').map((p) => p.trim()).filter(Boolean)
-        : [],
+      permissions: parseApiKeyPermissions(key.permissions),
       lastUsedAt: key.last_used_at,
       expiresAt: key.expires_at,
       isActive: key.is_active === 1 || key.is_active === true,

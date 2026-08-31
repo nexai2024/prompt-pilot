@@ -53,9 +53,39 @@ interface DashboardStats {
   };
 }
 
+interface ActivityItem {
+  id: string;
+  method: string;
+  path: string;
+  statusCode: number;
+  responseTimeMs: number;
+  tokensUsed: number | null;
+  errorMessage: string | null;
+  createdAt: string | null;
+}
+
+interface QualitySummary {
+  avgScore: number | null;
+  scoredPrompts: number;
+  improving: number;
+  declining: number;
+  totalScores: number;
+}
+
+interface ScoredPrompt {
+  promptId: string;
+  promptName: string;
+  overallScore: number;
+  createdAt: string;
+  delta: number | null;
+}
+
 export default function Dashboard() {
   const orgLoading = false;
   const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [activity, setActivity] = useState<ActivityItem[]>([]);
+  const [qualitySummary, setQualitySummary] = useState<QualitySummary | null>(null);
+  const [scoredPrompts, setScoredPrompts] = useState<ScoredPrompt[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -65,14 +95,27 @@ export default function Dashboard() {
   const loadDashboardStats = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/dashboard/stats`, { credentials: 'include' });
-      const data = await response.json();
+      const [statsResponse, activityResponse, scoresResponse] = await Promise.all([
+        fetch(`/api/dashboard/stats`, { credentials: 'include' }),
+        fetch(`/api/dashboard/activity?limit=15`, { credentials: 'include' }),
+        fetch(`/api/dashboard/scores`, { credentials: 'include' }),
+      ]);
+      const data = await statsResponse.json();
+      const activityData = await activityResponse.json();
+      const scoresData = await scoresResponse.json();
 
-      if (!response.ok) {
+      if (!statsResponse.ok) {
         throw new Error(data.error || 'Failed to load dashboard stats');
       }
 
       setStats(data.stats);
+      if (activityResponse.ok) {
+        setActivity(activityData.activity || []);
+      }
+      if (scoresResponse.ok) {
+        setQualitySummary(scoresData.summary || null);
+        setScoredPrompts(scoresData.prompts || []);
+      }
     } catch (error: any) {
       console.error('Error loading dashboard stats:', error);
       toast.error('Failed to load dashboard data');
@@ -421,6 +464,124 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         )}
+
+        {/* Prompt Quality Overview */}
+        {qualitySummary && qualitySummary.scoredPrompts > 0 && (
+          <Card className="shadow-lg border-0 mb-8">
+            <CardHeader className="border-b border-gray-100">
+              <CardTitle className="flex items-center">
+                <BarChart3 className="w-5 h-5 mr-2 text-indigo-600" />
+                Prompt Quality Overview
+              </CardTitle>
+              <CardDescription>
+                AI score trends across your workspace
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-6">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <div className="rounded-lg border p-4 text-center">
+                  <p className="text-xs text-gray-500">Avg score</p>
+                  <p className="text-3xl font-bold text-indigo-600">{qualitySummary.avgScore}</p>
+                </div>
+                <div className="rounded-lg border p-4 text-center">
+                  <p className="text-xs text-gray-500">Scored prompts</p>
+                  <p className="text-3xl font-bold text-gray-900">{qualitySummary.scoredPrompts}</p>
+                </div>
+                <div className="rounded-lg border p-4 text-center">
+                  <p className="text-xs text-gray-500">Improving</p>
+                  <p className="text-3xl font-bold text-green-600">{qualitySummary.improving}</p>
+                </div>
+                <div className="rounded-lg border p-4 text-center">
+                  <p className="text-xs text-gray-500">Total scores</p>
+                  <p className="text-3xl font-bold text-gray-900">{qualitySummary.totalScores}</p>
+                </div>
+              </div>
+              <div className="space-y-3">
+                {scoredPrompts.map((item) => (
+                  <Link key={item.promptId} href={`/prompt-studio?promptId=${item.promptId}`}>
+                    <div className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 transition-colors">
+                      <div>
+                        <p className="font-medium text-gray-900">{item.promptName}</p>
+                        <p className="text-xs text-gray-500">
+                          Last scored {new Date(item.createdAt).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        {item.delta != null && (
+                          <span
+                            className={`text-sm font-medium ${
+                              item.delta >= 0 ? 'text-green-600' : 'text-red-600'
+                            }`}
+                          >
+                            {item.delta >= 0 ? '+' : ''}
+                            {item.delta}
+                          </span>
+                        )}
+                        <Badge>{item.overallScore}/100</Badge>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Live Activity Feed */}
+        <Card className="shadow-lg border-0 mb-8">
+          <CardHeader className="border-b border-gray-100">
+            <CardTitle className="flex items-center">
+              <Activity className="w-5 h-5 mr-2 text-orange-600" />
+              Live Activity Feed
+            </CardTitle>
+            <CardDescription>Recent API calls and AI operations from your workspace</CardDescription>
+          </CardHeader>
+          <CardContent className="p-6">
+            {activity.length > 0 ? (
+              <div className="space-y-3">
+                {activity.map((item) => (
+                  <div
+                    key={item.id}
+                    className="flex items-center justify-between p-3 border border-gray-100 rounded-lg"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <Badge
+                        variant="outline"
+                        className={
+                          item.statusCode >= 200 && item.statusCode < 300
+                            ? 'border-green-300 text-green-700'
+                            : item.statusCode >= 400
+                              ? 'border-red-300 text-red-700'
+                              : ''
+                        }
+                      >
+                        {item.method}
+                      </Badge>
+                      <code className="text-xs text-gray-700 truncate">{item.path}</code>
+                    </div>
+                    <div className="flex items-center gap-3 text-xs text-gray-500 flex-shrink-0">
+                      <span>{item.responseTimeMs}ms</span>
+                      {item.tokensUsed != null && <span>{item.tokensUsed} tokens</span>}
+                      {item.createdAt && (
+                        <span>{new Date(item.createdAt).toLocaleString()}</span>
+                      )}
+                      {item.statusCode >= 400 ? (
+                        <AlertCircle className="w-4 h-4 text-red-500" />
+                      ) : (
+                        <CheckCircle className="w-4 h-4 text-green-500" />
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-10 text-gray-500">
+                <Activity className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                <p>No activity yet. Run a prompt test or call a deployed API to see events here.</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

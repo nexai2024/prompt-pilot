@@ -107,6 +107,46 @@ async function handleGateway(
 ) {
   const host = getRequestHost(req);
   const requestPath = normalizePath(pathSegments.join('/'));
+
+  if (requestPath === '/health' && req.method === 'GET') {
+    const parsed = parseTenantHost(host);
+    if (!parsed) {
+      return NextResponse.json({ error: 'Invalid host' }, { status: 400 });
+    }
+
+    let organization: NcbRecord | null = null;
+
+    if (parsed.vanitySubdomain) {
+      organization = await getOrganizationByVanitySubdomain(parsed.vanitySubdomain);
+    } else if (parsed.customDomain) {
+      organization = await getOrganizationByCustomDomain(parsed.customDomain);
+      if (
+        organization &&
+        organization.custom_domain_verified !== 1 &&
+        organization.custom_domain_verified !== true
+      ) {
+        return NextResponse.json(
+          { error: 'Custom domain not verified' },
+          { status: 403 }
+        );
+      }
+    }
+
+    if (!organization) {
+      return NextResponse.json({ error: 'Tenant not found' }, { status: 404 });
+    }
+
+    return NextResponse.json({
+      status: 'ok',
+      host,
+      environment: parsed.environment,
+      organization: {
+        id: organization.supabase_id || organization.id,
+        name: organization.name,
+      },
+    });
+  }
+
   const resolved = await resolveDeployment(host, requestPath, req.method);
 
   if ('error' in resolved) {

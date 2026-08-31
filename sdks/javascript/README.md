@@ -139,7 +139,7 @@ try {
 ```typescript
 const client = new PromptPilot({
   apiKey: 'pp_live_xxx',
-  baseURL: 'https://api.promptpilot.com', // Optional: custom API URL
+  baseURL: 'https://beta.promptpilot.run', // Optional: custom API URL
   timeout: 30000 // Optional: request timeout in ms
 });
 ```

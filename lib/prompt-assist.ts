@@ -54,6 +54,102 @@ Return JSON with this exact shape:
   ]
 }`;
 
+export const SCORE_USER_TEMPLATE = (params: {
+  prompt: string;
+  name?: string;
+  description?: string;
+}) => `Evaluate this LLM prompt for production readiness. Be constructive and specific — praise what works and explain how to improve weaknesses.
+
+Prompt name: ${params.name || 'Untitled'}
+${params.description ? `Description: ${params.description}` : ''}
+
+Prompt text:
+"""
+${params.prompt}
+"""
+
+Score each dimension 0–100:
+- clarity: Is the task and role unambiguous?
+- specificity: Are requirements, constraints, and output format concrete?
+- structure: Is the prompt well-organized and scannable?
+- variables: Are {{placeholders}} used appropriately and consistently?
+- robustness: Does it handle edge cases, ambiguity, and failure modes?
+
+Return JSON with this exact shape:
+{
+  "overall_score": 0,
+  "dimensions": {
+    "clarity": 0,
+    "specificity": 0,
+    "structure": 0,
+    "variables": 0,
+    "robustness": 0
+  },
+  "summary": "2-3 sentence overall assessment",
+  "strengths": ["specific things done well"],
+  "improvements": ["specific constructive criticism with actionable fixes"],
+  "suggestions": ["concrete rewrite or addition suggestions, one per item"]
+}`;
+
+export interface PromptScoreDimension {
+  label: string;
+  score: number;
+  color: string;
+}
+
+export interface PromptScoreResult {
+  overall_score: number;
+  dimensions: PromptScoreDimension[];
+  summary: string;
+  strengths: string[];
+  improvements: string[];
+  suggestions: string[];
+}
+
+const SCORE_DIMENSION_META: Array<{ key: string; label: string; color: string }> = [
+  { key: 'clarity', label: 'Clarity', color: '#3a80ff' },
+  { key: 'specificity', label: 'Specificity', color: '#6366f1' },
+  { key: 'structure', label: 'Structure', color: '#8b5cf6' },
+  { key: 'variables', label: 'Variables', color: '#22e8f5' },
+  { key: 'robustness', label: 'Robustness', color: '#10b981' },
+];
+
+export function normalizeScoreResult(raw: Record<string, unknown>): PromptScoreResult {
+  const dimsRaw = (raw.dimensions || {}) as Record<string, unknown>;
+  const dimensions: PromptScoreDimension[] = SCORE_DIMENSION_META.map((meta) => ({
+    label: meta.label,
+    score: Math.min(100, Math.max(0, Number(dimsRaw[meta.key] ?? 0))),
+    color: meta.color,
+  }));
+
+  const overallFromDims =
+    dimensions.length > 0
+      ? Math.round(dimensions.reduce((sum, d) => sum + d.score, 0) / dimensions.length)
+      : 0;
+
+  const overall_score = Math.min(
+    100,
+    Math.max(0, Number(raw.overall_score ?? raw.overallScore ?? overallFromDims))
+  );
+
+  return {
+    overall_score,
+    dimensions,
+    summary: String(raw.summary || raw.assessment || ''),
+    strengths: Array.isArray(raw.strengths) ? raw.strengths.map(String) : [],
+    improvements: Array.isArray(raw.improvements)
+      ? raw.improvements.map(String)
+      : Array.isArray(raw.weaknesses)
+        ? (raw.weaknesses as unknown[]).map(String)
+        : [],
+    suggestions: Array.isArray(raw.suggestions)
+      ? raw.suggestions.map(String)
+      : Array.isArray(raw.recommendations)
+        ? (raw.recommendations as unknown[]).map(String)
+        : [],
+  };
+}
+
 export interface GeneratedPromptResult {
   prompt: string;
   suggested_name: string;

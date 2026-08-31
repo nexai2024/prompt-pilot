@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { navigateAfterAuth } from '@/lib/tenant-redirect-client';
 
 type Providers = {
   email?: boolean;
@@ -47,8 +48,7 @@ export default function SignUpPage() {
         throw new Error(data.message || data.error || 'Sign up failed');
       }
 
-      router.push('/dashboard');
-      router.refresh();
+      await navigateAfterAuth('/dashboard', router);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sign up failed');
     } finally {

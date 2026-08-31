@@ -58,31 +58,10 @@ export async function getSessionUser(
   return data.user || null;
 }
 
-export function transformSetCookieForLocalhost(cookie: string): string {
-  const parts = cookie.split(';');
-  let nameValue = parts[0]?.trim() ?? '';
+import { transformAuthSetCookie } from './cookie-utils';
 
-  if (nameValue.startsWith('__Secure-better-auth.')) {
-    nameValue = nameValue.replace('__Secure-', '');
-  } else if (nameValue.startsWith('__Host-better-auth.')) {
-    nameValue = nameValue.replace('__Host-', '');
-  }
-
-  const otherAttributes = parts
-    .slice(1)
-    .map((attr) => attr.trim())
-    .filter((attr) => {
-      const lower = attr.toLowerCase();
-      return (
-        !lower.startsWith('domain=') &&
-        !lower.startsWith('secure') &&
-        !lower.startsWith('samesite=')
-      );
-    });
-
-  otherAttributes.push('SameSite=Lax');
-
-  return [nameValue, ...otherAttributes].join('; ');
+export function transformSetCookieForLocalhost(cookie: string, host = 'localhost'): string {
+  return transformAuthSetCookie(cookie, host);
 }
 
 export async function proxyToNCB(
