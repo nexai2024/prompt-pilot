@@ -11,6 +11,10 @@ const APP_ROUTES = [
   '/analytics',
   '/settings',
   '/prompt-scorer',
+  '/templates',
+  '/lab',
+  '/playground',
+  '/evals',
 ];
 
 function isPlatformHost(hostname: string): boolean {

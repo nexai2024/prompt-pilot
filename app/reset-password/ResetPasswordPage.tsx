@@ -76,8 +76,9 @@ export default function ResetPasswordPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-50 via-blue-50 to-cyan-50 p-4">
-      <Card className="w-full max-w-md">
+    <div className="relative min-h-screen flex items-center justify-center bg-background p-4">
+      <div className="pointer-events-none absolute inset-0 bg-grid-fade" />
+      <Card className="relative w-full max-w-md">
         <CardHeader>
           <CardTitle>{token ? 'Set a new password' : 'Reset your password'}</CardTitle>
           <CardDescription>

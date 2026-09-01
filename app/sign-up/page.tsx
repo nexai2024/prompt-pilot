@@ -79,8 +79,9 @@ export default function SignUpPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-50 via-blue-50 to-cyan-50 p-4">
-      <Card className="w-full max-w-md">
+    <div className="min-h-screen flex items-center justify-center bg-background p-4">
+      <div className="pointer-events-none absolute inset-0 bg-grid-fade" />
+      <Card className="relative w-full max-w-md">
         <CardHeader>
           <CardTitle>Create your account</CardTitle>
           <CardDescription>Start building AI-powered APIs with Prompt Pilot.</CardDescription>
@@ -127,7 +128,7 @@ export default function SignUpPage() {
 
           <p className="text-sm text-center text-muted-foreground">
             Already have an account?{' '}
-            <Link href="/sign-in" className="text-purple-600 hover:underline">
+            <Link href="/sign-in" className="text-primary hover:underline">
               Sign in
             </Link>
           </p>

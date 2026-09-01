@@ -466,9 +466,8 @@ function PromptStudio() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white">
-      {/* Header */}
-      <div className="bg-white border-b shadow-sm">
+    <div className="min-h-screen bg-background">
+      <div className="border-b bg-card/80 backdrop-blur">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center space-x-4">
@@ -483,7 +482,7 @@ function PromptStudio() {
                 <div className="w-8 h-8 bg-gradient-to-r from-purple-600 to-pink-600 rounded-xl flex items-center justify-center shadow-lg">
                   <Brain className="w-5 h-5 text-white" />
                 </div>
-                <h1 className="text-xl font-bold text-gray-900">Prompt Studio</h1>
+                <h1 className="text-xl font-semibold">Prompt Studio</h1>
                 <Badge className="bg-gradient-to-r from-purple-100 to-pink-100 text-purple-700 border-purple-200">
                   <Sparkles className="w-3 h-3 mr-1" />
                   AI-Powered
@@ -502,6 +501,12 @@ function PromptStudio() {
                   event.target.value = '';
                 }}
               />
+              <Button variant="outline" size="sm" className="hidden sm:flex" asChild>
+                <Link href="/templates">
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  Templates
+                </Link>
+              </Button>
               <Button variant="outline" size="sm" className="hidden sm:flex" onClick={exportPrompt}>
                 <Download className="w-4 h-4 mr-2" />
                 Export

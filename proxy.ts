@@ -19,6 +19,7 @@ const publicRoutes = [
   '/sign-up',
   '/reset-password',
   '/auth/callback',
+  '/templates',
 ];
 
 function isPublicRoute(pathname: string): boolean {
@@ -65,6 +66,10 @@ function shouldRedirectToTenantApp(request: NextRequest): string | null {
     '/analytics',
     '/settings',
     '/prompt-scorer',
+    '/templates',
+    '/lab',
+    '/playground',
+    '/evals',
   ];
 
   if (appRoutes.some((route) => pathname === route || pathname.startsWith(`${route}/`))) {

@@ -15,10 +15,13 @@ import {
   BarChart3,
   Brain,
   Code,
+  FlaskConical,
   Home,
+  LayoutTemplate,
   Rocket,
   Settings,
   Sparkles,
+  Terminal,
 } from 'lucide-react';
 
 interface PromptOption {
@@ -58,9 +61,7 @@ export function CommandPalette() {
           );
         }
       })
-      .catch(() => {
-        // silent — palette still works for static routes
-      });
+      .catch(() => undefined);
   }, [open]);
 
   const navigate = useCallback(
@@ -77,21 +78,33 @@ export function CommandPalette() {
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
         <CommandGroup heading="Navigation">
-          <CommandItem onSelect={() => navigate('/')}>
-            <Home className="mr-2 h-4 w-4" />
-            Home
-          </CommandItem>
           <CommandItem onSelect={() => navigate('/dashboard')}>
-            <BarChart3 className="mr-2 h-4 w-4" />
+            <Home className="mr-2 h-4 w-4" />
             Dashboard
-          </CommandItem>
-          <CommandItem onSelect={() => navigate('/prompt-scorer')}>
-            <BarChart3 className="mr-2 h-4 w-4" />
-            Prompt Scorer
           </CommandItem>
           <CommandItem onSelect={() => navigate('/prompt-studio')}>
             <Brain className="mr-2 h-4 w-4" />
             Prompt Studio
+          </CommandItem>
+          <CommandItem onSelect={() => navigate('/templates')}>
+            <LayoutTemplate className="mr-2 h-4 w-4" />
+            Templates
+          </CommandItem>
+          <CommandItem onSelect={() => navigate('/lab')}>
+            <FlaskConical className="mr-2 h-4 w-4" />
+            A/B Lab
+          </CommandItem>
+          <CommandItem onSelect={() => navigate('/playground')}>
+            <Terminal className="mr-2 h-4 w-4" />
+            API Playground
+          </CommandItem>
+          <CommandItem onSelect={() => navigate('/evals')}>
+            <Sparkles className="mr-2 h-4 w-4" />
+            Eval Suites
+          </CommandItem>
+          <CommandItem onSelect={() => navigate('/prompt-scorer')}>
+            <BarChart3 className="mr-2 h-4 w-4" />
+            Prompt Scorer
           </CommandItem>
           <CommandItem onSelect={() => navigate('/api-designer')}>
             <Code className="mr-2 h-4 w-4" />

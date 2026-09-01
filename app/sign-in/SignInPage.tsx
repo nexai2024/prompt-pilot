@@ -65,8 +65,9 @@ export default function SignInPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-50 via-blue-50 to-cyan-50 p-4">
-      <Card className="w-full max-w-md">
+    <div className="min-h-screen flex items-center justify-center bg-background p-4">
+      <div className="pointer-events-none absolute inset-0 bg-grid-fade" />
+      <Card className="relative w-full max-w-md">
         <CardHeader>
           <CardTitle>Sign in to Prompt Pilot</CardTitle>
           <CardDescription>Access your prompts, APIs, and analytics.</CardDescription>
@@ -104,14 +105,14 @@ export default function SignInPage() {
           {providers.public_signup !== false && (
             <p className="text-sm text-center text-muted-foreground">
               Don&apos;t have an account?{' '}
-              <Link href="/sign-up" className="text-purple-600 hover:underline">
+              <Link href="/sign-up" className="text-primary hover:underline">
                 Sign up
               </Link>
             </p>
           )}
 
           <p className="text-sm text-center">
-            <Link href="/reset-password" className="text-purple-600 hover:underline">
+            <Link href="/reset-password" className="text-primary hover:underline">
               Forgot password?
             </Link>
           </p>

@@ -25,6 +25,7 @@ import {
   Loader2,
   AlertCircle
 } from 'lucide-react';
+import { GettingStarted } from '@/components/GettingStarted';
 import { toast } from 'sonner';
 
 interface DashboardStats {
@@ -129,15 +130,47 @@ export default function Dashboard() {
       title: 'Create Prompt',
       description: 'Build a new AI prompt',
       icon: Brain,
-      color: 'from-purple-500 to-pink-500',
+      color: 'from-violet-500 to-indigo-500',
       href: '/prompt-studio',
       action: 'Create'
     },
     {
-      title: 'Design API',
-      description: 'Design a new API endpoint',
-      icon: Code,
+      title: 'Browse Templates',
+      description: 'Clone a ready-made recipe',
+      icon: Sparkles,
+      color: 'from-fuchsia-500 to-pink-500',
+      href: '/templates',
+      action: 'Browse'
+    },
+    {
+      title: 'A/B Lab',
+      description: 'Compare two variants',
+      icon: Zap,
       color: 'from-blue-500 to-cyan-500',
+      href: '/lab',
+      action: 'Compare'
+    },
+    {
+      title: 'API Playground',
+      description: 'Send a live test request',
+      icon: Code,
+      color: 'from-emerald-500 to-teal-500',
+      href: '/playground',
+      action: 'Try'
+    },
+    {
+      title: 'Eval Suites',
+      description: 'Batch-test prompt quality',
+      icon: CheckCircle,
+      color: 'from-amber-500 to-orange-500',
+      href: '/evals',
+      action: 'Test'
+    },
+    {
+      title: 'Design API',
+      description: 'Map a prompt to an endpoint',
+      icon: Server,
+      color: 'from-sky-500 to-blue-500',
       href: '/api-designer',
       action: 'Design'
     },
@@ -151,7 +184,7 @@ export default function Dashboard() {
     },
     {
       title: 'Deploy API',
-      description: 'Deploy to production',
+      description: 'Publish to production',
       icon: Rocket,
       color: 'from-orange-500 to-red-500',
       href: '/deployments',
@@ -161,7 +194,7 @@ export default function Dashboard() {
 
   if (orgLoading || loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="w-12 h-12 animate-spin mx-auto text-purple-600 mb-4" />
           <p className="text-gray-600">Loading dashboard...</p>
@@ -211,19 +244,13 @@ export default function Dashboard() {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50">
-      {/* Header */}
-      <div className="bg-white border-b shadow-sm">
+    <div className="min-h-screen bg-background">
+      <div className="border-b bg-card/70 backdrop-blur">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-gradient-to-r from-purple-600 to-blue-600 rounded-xl flex items-center justify-center shadow-lg">
-                <Sparkles className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-gray-900">Dashboard</h1>
-                <p className="text-sm text-gray-500">Prompt Pilot</p>
-              </div>
+            <div>
+              <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Workspace</p>
+              <h1 className="text-xl font-semibold text-foreground">Dashboard</h1>
             </div>
             <div className="flex items-center space-x-3">
               <Button variant="outline" size="sm" asChild>
@@ -238,43 +265,67 @@ export default function Dashboard() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="mb-8 rounded-2xl border-2 border-violet-300 bg-violet-50 p-6 dark:border-violet-800 dark:bg-violet-950/40">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-violet-700 dark:text-violet-300">
+            New features
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Link href="/templates" className="rounded-xl border bg-background p-4 hover:border-primary">
+              <p className="font-semibold">Templates</p>
+              <p className="mt-1 text-sm text-muted-foreground">Clone a starter prompt into Studio.</p>
+            </Link>
+            <Link href="/playground" className="rounded-xl border bg-background p-4 hover:border-primary">
+              <p className="font-semibold">Playground</p>
+              <p className="mt-1 text-sm text-muted-foreground">Send JSON and inspect the live response.</p>
+            </Link>
+            <Link href="/evals" className="rounded-xl border bg-background p-4 hover:border-primary">
+              <p className="font-semibold">Eval Suites</p>
+              <p className="mt-1 text-sm text-muted-foreground">Batch-test cases against a prompt.</p>
+            </Link>
+            <Link href="/lab" className="rounded-xl border bg-background p-4 hover:border-primary">
+              <p className="font-semibold">A/B Lab</p>
+              <p className="mt-1 text-sm text-muted-foreground">Compare two prompts or models.</p>
+            </Link>
+          </div>
+        </div>
+
         {/* Welcome Banner */}
-        <div className="bg-gradient-to-r from-purple-600 via-blue-600 to-cyan-600 rounded-2xl p-8 mb-8 text-white shadow-2xl">
+        <div className="rounded-2xl border bg-card p-8 mb-8">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-3xl font-bold mb-2">Welcome to Prompt Pilot 🚀</h2>
-              <p className="text-purple-100 text-lg mb-4">
-                Transform your AI prompts into production-ready APIs in minutes
+              <h2 className="text-2xl font-semibold mb-2">Welcome back</h2>
+              <p className="text-muted-foreground mb-4">
+                Score, compare, and ship prompts as production APIs.
               </p>
               <div className="flex items-center space-x-4">
                 <Button
                   size="lg"
-                  className="bg-white text-purple-600 hover:bg-purple-50 shadow-lg hover:shadow-xl transition-all duration-300"
                   asChild
                 >
                   <Link href="/prompt-studio">
                     <Plus className="w-5 h-5 mr-2" />
-                    Create Your First Prompt
+                    New prompt
                   </Link>
                 </Button>
                 <Button
                   size="lg"
                   variant="outline"
-                  className="border-2 border-white text-white hover:bg-white/10"
                   asChild
                 >
-                  <Link href="/analytics">
-                    <BarChart3 className="w-5 h-5 mr-2" />
-                    View Analytics
+                  <Link href="/templates">
+                    <Sparkles className="w-5 h-5 mr-2" />
+                    Browse templates
                   </Link>
                 </Button>
               </div>
             </div>
-            <div className="hidden lg:block">
-              <Sparkles className="w-32 h-32 text-white/30" />
+            <div className="hidden lg:block text-muted-foreground">
+              <Sparkles className="w-24 h-24 opacity-30" />
             </div>
           </div>
         </div>
+
+        <GettingStarted />
 
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">

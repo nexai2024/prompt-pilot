@@ -4,9 +4,11 @@ import Anthropic from '@anthropic-ai/sdk';
 import { CohereClient } from 'cohere-ai';
 import {
   ensureDefaultOrganization,
+  findByPublicId,
   logApiCall,
   requireSession,
 } from '@/lib/ncb-server';
+import { renderPromptTemplate } from '@/lib/prompt-render';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || '',
@@ -169,11 +171,10 @@ export async function POST(req: NextRequest) {
       presence_penalty?: number;
       stop_sequences?: string[];
       prompt_id?: string;
+      variables?: Record<string, unknown>;
     };
 
     const {
-      prompt,
-      model = 'gpt-3.5-turbo',
       temperature = 0.7,
       max_tokens = 1000,
       top_p = 1,
@@ -181,7 +182,26 @@ export async function POST(req: NextRequest) {
       presence_penalty = 0,
       stop_sequences = [],
       prompt_id,
+      variables,
     } = body;
+
+    let prompt = body.prompt || '';
+    let model = body.model || 'gpt-3.5-turbo';
+
+    if (prompt_id && !prompt.trim()) {
+      const record = await findByPublicId('prompts', cookieHeader, prompt_id);
+      if (!record) {
+        return NextResponse.json({ error: 'Prompt not found' }, { status: 404 });
+      }
+      prompt = String(record.content || '');
+      if (!body.model) {
+        model = String(record.model || model);
+      }
+    }
+
+    if (variables && Object.keys(variables).length > 0) {
+      prompt = renderPromptTemplate(prompt, variables);
+    }
 
     logPath = buildLogPath(prompt_id);
 

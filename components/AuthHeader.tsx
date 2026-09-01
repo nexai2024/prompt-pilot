@@ -1,13 +1,47 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { AccountButton } from '@/components/AccountButton';
-import { Brain, Command } from 'lucide-react';
+import { ThemeToggle } from '@/components/ThemeToggle';
+import { NotificationCenter } from '@/components/NotificationCenter';
+import { Badge } from '@/components/ui/badge';
+import {
+  Brain,
+  FlaskConical,
+  LayoutTemplate,
+  ListChecks,
+  Terminal,
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+const AUTH_ONLY_PATHS = new Set(['/sign-in', '/sign-up', '/reset-password', '/auth/callback']);
+
+const PRIMARY_LINKS = [
+  { href: '/dashboard', label: 'Home' },
+  { href: '/templates', label: 'Templates', isNew: true },
+  { href: '/playground', label: 'Playground', isNew: true },
+  { href: '/evals', label: 'Eval Suites', isNew: true },
+  { href: '/lab', label: 'A/B Lab', isNew: true },
+  { href: '/prompt-studio', label: 'Studio' },
+  { href: '/api-designer', label: 'APIs' },
+  { href: '/deployments', label: 'Deploy' },
+  { href: '/analytics', label: 'Analytics' },
+  { href: '/prompt-scorer', label: 'Scorer' },
+  { href: '/settings', label: 'Settings' },
+];
+
+const FEATURE_LINKS = [
+  { href: '/templates', label: 'Templates', icon: LayoutTemplate },
+  { href: '/playground', label: 'Playground', icon: Terminal },
+  { href: '/evals', label: 'Eval Suites', icon: ListChecks },
+  { href: '/lab', label: 'A/B Lab', icon: FlaskConical },
+];
 
 export default function AuthHeader() {
+  const pathname = usePathname();
   const router = useRouter();
   const [session, setSession] = useState<{ user?: { email?: string; name?: string } } | null>(
     null
@@ -17,7 +51,10 @@ export default function AuthHeader() {
   useEffect(() => {
     fetch('/api/auth/get-session', { credentials: 'include' })
       .then((res) => res.json())
-      .then((data) => setSession(data))
+      .then((data) => {
+        const user = data?.user || data?.session?.user || null;
+        setSession(user ? { user } : null);
+      })
       .catch(() => setSession(null))
       .finally(() => setLoading(false));
   }, []);
@@ -29,63 +66,103 @@ export default function AuthHeader() {
     router.refresh();
   };
 
+  if (AUTH_ONLY_PATHS.has(pathname || '')) {
+    return null;
+  }
+
+  const isAuthed = Boolean(session?.user);
+  const showAppNav = isAuthed;
+
   if (loading) {
-    return <header className="flex justify-end items-center p-4 gap-4 h-16" />;
+    return <header className="h-16 border-b bg-background/80 backdrop-blur" />;
   }
 
   return (
-    <header className="sticky top-0 z-40 flex items-center justify-between px-4 sm:px-6 h-16 border-b bg-white/80 backdrop-blur">
-      <div className="flex items-center gap-6">
-        <Link href="/dashboard" className="flex items-center gap-2 font-semibold text-gray-900">
-          <div className="w-8 h-8 bg-gradient-to-r from-purple-600 to-blue-600 rounded-lg flex items-center justify-center">
-            <Brain className="w-4 h-4 text-white" />
+    <header className="sticky top-0 z-40 border-b bg-background/90 backdrop-blur-md">
+      <div className="mx-auto flex h-14 max-w-[1400px] items-center justify-between gap-3 px-3 sm:px-6">
+        <Link href={showAppNav ? '/dashboard' : '/'} className="flex shrink-0 items-center gap-2 font-semibold">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-violet-600 to-indigo-500">
+            <Brain className="h-4 w-4 text-white" />
           </div>
           <span className="hidden sm:inline">Prompt Pilot</span>
         </Link>
-        {session?.user && (
-          <nav className="hidden md:flex items-center gap-4 text-sm text-gray-600">
-            <Link href="/prompt-studio" className="hover:text-purple-600 transition-colors">
-              Studio
+
+        {showAppNav ? (
+          <nav className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+            {PRIMARY_LINKS.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className={cn(
+                  'flex shrink-0 items-center gap-1 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground',
+                  pathname === link.href || pathname?.startsWith(`${link.href}/`)
+                    ? 'bg-accent font-medium text-foreground'
+                    : ''
+                )}
+              >
+                {link.label}
+                {link.isNew ? (
+                  <Badge className="h-4 px-1 text-[9px] leading-none">New</Badge>
+                ) : null}
+              </Link>
+            ))}
+          </nav>
+        ) : (
+          <nav className="hidden items-center gap-4 sm:flex">
+            <Link href="/templates" className="text-sm text-muted-foreground hover:text-foreground">
+              Templates
             </Link>
-            <Link href="/prompt-scorer" className="hover:text-purple-600 transition-colors">
-              Scorer
-            </Link>
-            <Link href="/api-designer" className="hover:text-purple-600 transition-colors">
-              APIs
-            </Link>
-            <Link href="/deployments" className="hover:text-purple-600 transition-colors">
-              Deploy
-            </Link>
-            <Link href="/analytics" className="hover:text-purple-600 transition-colors">
-              Analytics
+            <Link href="/#features" className="text-sm text-muted-foreground hover:text-foreground">
+              Features
             </Link>
           </nav>
         )}
+
+        <div className="flex shrink-0 items-center gap-1.5">
+          {showAppNav ? <NotificationCenter /> : null}
+          <ThemeToggle />
+          {!showAppNav ? (
+            <>
+              <Button variant="ghost" asChild>
+                <Link href="/sign-in">Sign in</Link>
+              </Button>
+              <Button asChild>
+                <Link href="/sign-up">Sign up</Link>
+              </Button>
+            </>
+          ) : (
+            <>
+              <AccountButton />
+              <Button variant="outline" size="sm" onClick={handleSignOut}>
+                Sign out
+              </Button>
+            </>
+          )}
+        </div>
       </div>
-      <div className="flex items-center gap-3">
-        {session?.user && (
-          <kbd className="hidden lg:inline-flex items-center gap-1 rounded border bg-gray-50 px-2 py-1 text-xs text-gray-500">
-            <Command className="w-3 h-3" />K
-          </kbd>
-        )}
-        {!session?.user ? (
-        <>
-          <Button variant="outline" asChild>
-            <Link href="/sign-in">Sign in</Link>
-          </Button>
-          <Button asChild>
-            <Link href="/sign-up">Sign up</Link>
-          </Button>
-        </>
-      ) : (
-        <>
-          <AccountButton />
-          <Button variant="outline" onClick={handleSignOut}>
-            Sign out
-          </Button>
-        </>
-        )}
-      </div>
+
+      {showAppNav ? (
+        <div className="border-t bg-muted/50">
+          <div className="mx-auto flex max-w-[1400px] items-center gap-2 overflow-x-auto px-3 py-2 sm:px-6">
+            <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              New
+            </span>
+            {FEATURE_LINKS.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className={cn(
+                  'inline-flex shrink-0 items-center gap-1.5 rounded-full border bg-background px-3 py-1 text-sm hover:border-primary',
+                  pathname === link.href ? 'border-primary text-foreground' : 'text-muted-foreground'
+                )}
+              >
+                <link.icon className="h-3.5 w-3.5" />
+                {link.label}
+              </Link>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </header>
   );
 }

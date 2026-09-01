@@ -16,8 +16,8 @@ export default function PromptScorerPage() {
   const [prompt, setPrompt] = useState('');
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white">
-      <div className="bg-white border-b shadow-sm">
+    <div className="min-h-screen bg-background">
+      <div className="border-b bg-card/80 backdrop-blur">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="sm" asChild>
@@ -28,7 +28,7 @@ export default function PromptScorerPage() {
             </Button>
             <div className="flex items-center gap-2">
               <BarChart3 className="w-5 h-5 text-indigo-600" />
-              <h1 className="text-xl font-bold text-gray-900">Prompt Scorer</h1>
+              <h1 className="text-xl font-semibold">Prompt Scorer</h1>
             </div>
           </div>
           <Button variant="outline" size="sm" asChild>

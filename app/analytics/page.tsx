@@ -113,7 +113,7 @@ export default function Analytics() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="w-12 h-12 animate-spin mx-auto text-purple-600 mb-4" />
           <p className="text-gray-600">Loading analytics...</p>
@@ -171,9 +171,8 @@ export default function Analytics() {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50">
-      {/* Header */}
-      <div className="bg-white border-b shadow-sm">
+    <div className="min-h-screen bg-background">
+      <div className="border-b bg-card/80 backdrop-blur">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center space-x-4">
@@ -186,7 +185,7 @@ export default function Analytics() {
               <div className="h-6 w-px bg-gray-300" />
               <div className="flex items-center space-x-2">
                 <BarChart3 className="w-6 h-6 text-purple-600" />
-                <h1 className="text-xl font-bold text-gray-900">Analytics</h1>
+                <h1 className="text-xl font-semibold">Analytics</h1>
               </div>
             </div>
             <div className="flex items-center space-x-3">
