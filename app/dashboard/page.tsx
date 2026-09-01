@@ -15,7 +15,6 @@ import {
   Rocket,
   Activity,
   TrendingUp,
-  Settings,
   Brain,
   Server,
   Clock,
@@ -245,50 +244,7 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="border-b bg-card/70 backdrop-blur">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div>
-              <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Workspace</p>
-              <h1 className="text-xl font-semibold text-foreground">Dashboard</h1>
-            </div>
-            <div className="flex items-center space-x-3">
-              <Button variant="outline" size="sm" asChild>
-                <Link href="/settings">
-                  <Settings className="w-4 h-4 mr-2" />
-                  Settings
-                </Link>
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8 rounded-2xl border-2 border-violet-300 bg-violet-50 p-6 dark:border-violet-800 dark:bg-violet-950/40">
-          <p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-violet-700 dark:text-violet-300">
-            New features
-          </p>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Link href="/templates" className="rounded-xl border bg-background p-4 hover:border-primary">
-              <p className="font-semibold">Templates</p>
-              <p className="mt-1 text-sm text-muted-foreground">Clone a starter prompt into Studio.</p>
-            </Link>
-            <Link href="/playground" className="rounded-xl border bg-background p-4 hover:border-primary">
-              <p className="font-semibold">Playground</p>
-              <p className="mt-1 text-sm text-muted-foreground">Send JSON and inspect the live response.</p>
-            </Link>
-            <Link href="/evals" className="rounded-xl border bg-background p-4 hover:border-primary">
-              <p className="font-semibold">Eval Suites</p>
-              <p className="mt-1 text-sm text-muted-foreground">Batch-test cases against a prompt.</p>
-            </Link>
-            <Link href="/lab" className="rounded-xl border bg-background p-4 hover:border-primary">
-              <p className="font-semibold">A/B Lab</p>
-              <p className="mt-1 text-sm text-muted-foreground">Compare two prompts or models.</p>
-            </Link>
-          </div>
-        </div>
-
         {/* Welcome Banner */}
         <div className="rounded-2xl border bg-card p-8 mb-8">
           <div className="flex items-center justify-between">

@@ -7,38 +7,66 @@ import { Button } from '@/components/ui/button';
 import { AccountButton } from '@/components/AccountButton';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { NotificationCenter } from '@/components/NotificationCenter';
-import { Badge } from '@/components/ui/badge';
 import {
-  Brain,
-  FlaskConical,
-  LayoutTemplate,
-  ListChecks,
-  Terminal,
-} from 'lucide-react';
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Brain, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const AUTH_ONLY_PATHS = new Set(['/sign-in', '/sign-up', '/reset-password', '/auth/callback']);
 
-const PRIMARY_LINKS = [
-  { href: '/dashboard', label: 'Home' },
-  { href: '/templates', label: 'Templates', isNew: true },
-  { href: '/playground', label: 'Playground', isNew: true },
-  { href: '/evals', label: 'Eval Suites', isNew: true },
-  { href: '/lab', label: 'A/B Lab', isNew: true },
-  { href: '/prompt-studio', label: 'Studio' },
-  { href: '/api-designer', label: 'APIs' },
-  { href: '/deployments', label: 'Deploy' },
-  { href: '/analytics', label: 'Analytics' },
-  { href: '/prompt-scorer', label: 'Scorer' },
-  { href: '/settings', label: 'Settings' },
-];
+const NAV = [
+  { id: 'home', label: 'Home', href: '/dashboard' },
+  {
+    id: 'build',
+    label: 'Build',
+    href: '/prompt-studio',
+    children: [
+      { href: '/prompt-studio', label: 'Prompt Studio', hint: 'Write and version prompts' },
+      { href: '/templates', label: 'Templates', hint: 'Start from a recipe' },
+      { href: '/api-designer', label: 'API Designer', hint: 'Map a prompt to an endpoint' },
+    ],
+  },
+  {
+    id: 'test',
+    label: 'Test',
+    href: '/playground',
+    children: [
+      { href: '/playground', label: 'Playground', hint: 'Send a live request' },
+      { href: '/evals', label: 'Eval Suites', hint: 'Batch-test cases' },
+      { href: '/lab', label: 'A/B Lab', hint: 'Compare two variants' },
+      { href: '/prompt-scorer', label: 'Scorer', hint: 'Score prompt quality' },
+    ],
+  },
+  {
+    id: 'ship',
+    label: 'Ship',
+    href: '/deployments',
+    children: [
+      { href: '/deployments', label: 'Deployments', hint: 'Publish and health-check' },
+      { href: '/analytics', label: 'Analytics', hint: 'Usage, latency, and cost' },
+    ],
+  },
+  { id: 'settings', label: 'Settings', href: '/settings' },
+] as const;
 
-const FEATURE_LINKS = [
-  { href: '/templates', label: 'Templates', icon: LayoutTemplate },
-  { href: '/playground', label: 'Playground', icon: Terminal },
-  { href: '/evals', label: 'Eval Suites', icon: ListChecks },
-  { href: '/lab', label: 'A/B Lab', icon: FlaskConical },
-];
+function pathMatches(pathname: string | null, href: string) {
+  if (!pathname) return false;
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+function groupIsActive(
+  pathname: string | null,
+  item: (typeof NAV)[number]
+) {
+  if ('children' in item && item.children) {
+    return item.children.some((child) => pathMatches(pathname, child.href));
+  }
+  return pathMatches(pathname, item.href);
+}
 
 export default function AuthHeader() {
   const pathname = usePathname();
@@ -71,44 +99,80 @@ export default function AuthHeader() {
   }
 
   const isAuthed = Boolean(session?.user);
-  const showAppNav = isAuthed;
 
   if (loading) {
-    return <header className="h-16 border-b bg-background/80 backdrop-blur" />;
+    return <header className="h-14 border-b bg-background/80 backdrop-blur" />;
   }
 
   return (
     <header className="sticky top-0 z-40 border-b bg-background/90 backdrop-blur-md">
-      <div className="mx-auto flex h-14 max-w-[1400px] items-center justify-between gap-3 px-3 sm:px-6">
-        <Link href={showAppNav ? '/dashboard' : '/'} className="flex shrink-0 items-center gap-2 font-semibold">
+      <div className="mx-auto flex h-14 max-w-[1400px] items-center justify-between gap-4 px-4 sm:px-6">
+        <Link
+          href={isAuthed ? '/dashboard' : '/'}
+          className="flex shrink-0 items-center gap-2 font-semibold"
+        >
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-violet-600 to-indigo-500">
             <Brain className="h-4 w-4 text-white" />
           </div>
           <span className="hidden sm:inline">Prompt Pilot</span>
         </Link>
 
-        {showAppNav ? (
-          <nav className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
-            {PRIMARY_LINKS.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className={cn(
-                  'flex shrink-0 items-center gap-1 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground',
-                  pathname === link.href || pathname?.startsWith(`${link.href}/`)
-                    ? 'bg-accent font-medium text-foreground'
-                    : ''
-                )}
-              >
-                {link.label}
-                {link.isNew ? (
-                  <Badge className="h-4 px-1 text-[9px] leading-none">New</Badge>
-                ) : null}
-              </Link>
-            ))}
+        {isAuthed ? (
+          <nav className="flex min-w-0 items-center gap-0.5">
+            {NAV.map((item) => {
+              const active = groupIsActive(pathname, item);
+              if (!('children' in item)) {
+                return (
+                  <Link
+                    key={item.id}
+                    href={item.href}
+                    className={cn(
+                      'rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground',
+                      active && 'bg-accent font-medium text-foreground'
+                    )}
+                  >
+                    {item.label}
+                  </Link>
+                );
+              }
+
+              return (
+                <DropdownMenu key={item.id}>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      className={cn(
+                        'inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-sm text-muted-foreground outline-none hover:bg-accent hover:text-foreground data-[state=open]:bg-accent data-[state=open]:text-foreground',
+                        active && 'bg-accent font-medium text-foreground'
+                      )}
+                    >
+                      {item.label}
+                      <ChevronDown className="h-3.5 w-3.5 opacity-70" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-64">
+                    {item.children.map((child) => (
+                      <DropdownMenuItem key={child.href} asChild>
+                        <Link href={child.href} className="flex flex-col items-start gap-0.5">
+                          <span
+                            className={cn(
+                              'text-sm',
+                              pathMatches(pathname, child.href) && 'font-medium'
+                            )}
+                          >
+                            {child.label}
+                          </span>
+                          <span className="text-xs text-muted-foreground">{child.hint}</span>
+                        </Link>
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              );
+            })}
           </nav>
         ) : (
-          <nav className="hidden items-center gap-4 sm:flex">
+          <nav className="hidden items-center gap-5 sm:flex">
             <Link href="/templates" className="text-sm text-muted-foreground hover:text-foreground">
               Templates
             </Link>
@@ -119,9 +183,9 @@ export default function AuthHeader() {
         )}
 
         <div className="flex shrink-0 items-center gap-1.5">
-          {showAppNav ? <NotificationCenter /> : null}
+          {isAuthed ? <NotificationCenter /> : null}
           <ThemeToggle />
-          {!showAppNav ? (
+          {!isAuthed ? (
             <>
               <Button variant="ghost" asChild>
                 <Link href="/sign-in">Sign in</Link>
@@ -140,29 +204,6 @@ export default function AuthHeader() {
           )}
         </div>
       </div>
-
-      {showAppNav ? (
-        <div className="border-t bg-muted/50">
-          <div className="mx-auto flex max-w-[1400px] items-center gap-2 overflow-x-auto px-3 py-2 sm:px-6">
-            <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              New
-            </span>
-            {FEATURE_LINKS.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className={cn(
-                  'inline-flex shrink-0 items-center gap-1.5 rounded-full border bg-background px-3 py-1 text-sm hover:border-primary',
-                  pathname === link.href ? 'border-primary text-foreground' : 'text-muted-foreground'
-                )}
-              >
-                <link.icon className="h-3.5 w-3.5" />
-                {link.label}
-              </Link>
-            ))}
-          </div>
-        </div>
-      ) : null}
     </header>
   );
 }
