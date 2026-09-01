@@ -8,6 +8,7 @@ import { CommandPalette } from '@/components/CommandPalette';
 import { TenantBootstrap } from '@/components/TenantBootstrap';
 import { ThemeProvider } from '@/components/theme-provider';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { Analytics } from "@vercel/analytics/next"
 
 const sans = Plus_Jakarta_Sans({
   subsets: ['latin'],
@@ -44,6 +45,7 @@ export default function RootLayout({
             <Toaster position="top-right" richColors />
           </TooltipProvider>
         </ThemeProvider>
+        <Analytics />
       </body>
     </html>
   );
