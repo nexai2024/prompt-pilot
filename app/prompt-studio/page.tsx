@@ -12,11 +12,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, Play, Save, Settings, Brain, Zap, Plus, Copy, Trash2, Edit, TestTube, Variable as Variables, History, Download, Upload, RefreshCw, Check, X, AlertTriangle, Sparkles, Code, Wand2, Loader2 } from 'lucide-react';
+import { ArrowLeft, Play, Save, Settings, Brain, Zap, Plus, Copy, Trash2, Edit, TestTube, Variable as Variables, History, Download, Upload, RefreshCw, Check, X, AlertTriangle, Sparkles, Code, Wand2, Loader2, Star } from 'lucide-react';
 import { toast } from 'sonner';
 import { VersionHistory } from '@/components/prompt-studio/VersionHistory';
 import { PromptAssistPanel } from '@/components/prompt-studio/PromptAssistPanel';
 import { PromptScorePanel } from '@/components/prompt-studio/PromptScorePanel';
+import { parseFixtures, parseTags } from '@/lib/prompt-meta';
 
 interface Variable {
   id?: string;
@@ -41,6 +42,9 @@ interface Prompt {
   content_filtering: boolean;
   caching: boolean;
   status: string;
+  tags?: string | string[] | null;
+  is_starred?: boolean | number | null;
+  test_fixtures?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -86,6 +90,12 @@ function PromptStudio() {
   const [recentPrompts, setRecentPrompts] = useState<Prompt[]>([]);
   const [loadingPrompts, setLoadingPrompts] = useState(true);
   const [scoreEnhanceGoals, setScoreEnhanceGoals] = useState<string | null>(null);
+  const [versionRefreshKey, setVersionRefreshKey] = useState(0);
+  const [editingProd, setEditingProd] = useState(false);
+  const [drifted, setDrifted] = useState(false);
+  const [isStarred, setIsStarred] = useState(false);
+  const [promptTags, setPromptTags] = useState('');
+  const [sidebarFilter, setSidebarFilter] = useState<'all' | 'starred'>('all');
 
   // Load recent prompts
   useEffect(() => {
@@ -155,6 +165,47 @@ function PromptStudio() {
     }
   };
 
+  const applyWorkingCopy = (version: {
+    content: string;
+    model: string;
+    temperature: number;
+    max_tokens: number;
+    response_format?: string;
+  }) => {
+    setPrompt(version.content);
+    setSelectedModel(version.model);
+    setTemperature(version.temperature);
+    setMaxTokens(version.max_tokens);
+    if (version.response_format) setResponseFormat(version.response_format);
+    if (!promptId) return;
+    void (async () => {
+      const response = await fetch(`/api/prompts/${promptId}/variables`, {
+        credentials: 'include',
+      });
+      const data = await response.json();
+      if (response.ok && Array.isArray(data.variables)) {
+        setVariables(
+          data.variables.map((item: {
+            id?: string;
+            name: string;
+            type?: string;
+            description?: string;
+            default_value?: string;
+            required?: boolean;
+          }) => ({
+            id: item.id,
+            name: item.name,
+            value: '',
+            type: item.type || 'string',
+            description: item.description || '',
+            default_value: item.default_value,
+            required: Boolean(item.required),
+          }))
+        );
+      }
+    })();
+  };
+
   const loadPrompt = async (promptToLoad: Prompt) => {
     try {
       setIsLoading(true);
@@ -169,6 +220,9 @@ function PromptStudio() {
       setStreaming(promptToLoad.streaming || false);
       setContentFiltering(promptToLoad.content_filtering ?? true);
       setCaching(promptToLoad.caching ?? true);
+      setIsStarred(promptToLoad.is_starred === true || promptToLoad.is_starred === 1);
+      setPromptTags(parseTags(promptToLoad.tags).join(', '));
+      const fixtures = parseFixtures(promptToLoad.test_fixtures);
 
       // Load variables
       const response = await fetch(`/api/prompts/${promptToLoad.id}/variables`, {
@@ -177,14 +231,21 @@ function PromptStudio() {
       const data = await response.json();
 
       if (response.ok) {
-        setVariables(data.variables.map((v: any) => ({
+        setVariables(data.variables.map((v: {
+          id?: string;
+          name: string;
+          type?: string;
+          description?: string;
+          default_value?: string;
+          required?: boolean;
+        }) => ({
           id: v.id,
           name: v.name,
-          value: '',
-          type: v.type,
-          description: v.description,
+          value: fixtures[v.name] || '',
+          type: v.type || 'string',
+          description: v.description || '',
           default_value: v.default_value,
-          required: v.required
+          required: Boolean(v.required)
         })));
       }
 
@@ -207,6 +268,7 @@ function PromptStudio() {
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Failed to load prompt');
         await loadPrompt(data.prompt as Prompt);
+        if (data.versioning?.drifted) setDrifted(true);
       } catch {
         toast.error('Failed to load prompt from URL');
       } finally {
@@ -240,12 +302,14 @@ function PromptStudio() {
         streaming,
         content_filtering: contentFiltering,
         caching,
-        status: 'draft'
+        status: 'draft',
+        variables,
+        tags: promptTags,
+        is_starred: isStarred,
       };
 
       let response;
       if (promptId) {
-        // Update existing
         response = await fetch(`/api/prompts/${promptId}`, {
           method: 'PUT',
           credentials: 'include',
@@ -253,7 +317,6 @@ function PromptStudio() {
           body: JSON.stringify(promptData)
         });
       } else {
-        // Create new
         response = await fetch('/api/prompts', {
           method: 'POST',
           credentials: 'include',
@@ -270,45 +333,68 @@ function PromptStudio() {
 
       const savedPromptId = data.prompt.id;
       setPromptId(savedPromptId);
+      setVersionRefreshKey((value) => value + 1);
 
-      // Save variables
-      if (variables.length > 0) {
-        const variablesResponse = await fetch(`/api/prompts/${savedPromptId}/variables`, {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ variables })
-        });
-
-        if (!variablesResponse.ok) {
-          const varsData = await variablesResponse.json();
-          throw new Error(varsData.error || 'Failed to save variables');
-        }
+      if (data.versioning?.snapshotCreated) {
+        toast.success('Saved. Created a new snapshot because the input/output structure changed.');
+      } else {
+        toast.success(promptId ? 'Working copy updated.' : 'Prompt created with Dev and Prod system versions.');
       }
-
-      // Create version snapshot
-      const versionResponse = await fetch(`/api/prompts/${savedPromptId}/versions`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          content: prompt,
-          model: selectedModel,
-          temperature,
-          max_tokens: maxTokens
-        })
-      });
-
-      if (!versionResponse.ok) {
-        console.error('Failed to create version snapshot');
-      }
-
-      toast.success(promptId ? 'Prompt updated successfully!' : 'Prompt created successfully!');
       loadRecentPrompts();
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to save prompt');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to save prompt');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const toggleStar = async () => {
+    if (!promptId) {
+      setIsStarred((value) => !value);
+      return;
+    }
+    const next = !isStarred;
+    setIsStarred(next);
+    try {
+      const response = await fetch(`/api/prompts/${promptId}`, {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_starred: next }),
+      });
+      if (!response.ok) throw new Error('Could not update favorite');
+      setRecentPrompts((current) =>
+        current.map((item) =>
+          item.id === promptId ? { ...item, is_starred: next } : item
+        )
+      );
+    } catch {
+      setIsStarred(!next);
+      toast.error('Could not update favorite');
+    }
+  };
+
+  const saveTestFixture = async () => {
+    if (!promptId) {
+      toast.error('Save the prompt first');
+      return;
+    }
+    const fixtureValues = Object.fromEntries(
+      variables
+        .filter((variable) => variable.name.trim())
+        .map((variable) => [variable.name, variable.value || ''])
+    );
+    try {
+      const response = await fetch(`/api/prompts/${promptId}`, {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ test_fixtures: fixtureValues }),
+      });
+      if (!response.ok) throw new Error('Could not save fixture');
+      toast.success('Saved test values for Playground and later runs');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not save fixture');
     }
   };
 
@@ -380,6 +466,7 @@ function PromptStudio() {
     }
     setPromptId(null);
     setPromptName(promptName ? `${promptName} (copy)` : 'Untitled Prompt (copy)');
+    setEditingProd(false);
     toast.success('Prompt duplicated — save to create a new copy');
   };
 
@@ -394,6 +481,10 @@ function PromptStudio() {
     setTemperature(0.7);
     setMaxTokens(150);
     setResponseFormat('text');
+    setEditingProd(false);
+    setDrifted(false);
+    setIsStarred(false);
+    setPromptTags('');
     toast.success('New prompt created');
   };
 
@@ -487,6 +578,11 @@ function PromptStudio() {
                   <Sparkles className="w-3 h-3 mr-1" />
                   AI-Powered
                 </Badge>
+                {promptId && (
+                  <Badge variant={editingProd ? 'destructive' : 'secondary'}>
+                    {editingProd ? 'Editing production' : 'Dev'}
+                  </Badge>
+                )}
               </div>
             </div>
             <div className="flex items-center space-x-3">
@@ -538,6 +634,15 @@ function PromptStudio() {
               </Button>
               <Button
                 size="sm"
+                variant="outline"
+                className="hidden sm:flex"
+                onClick={() => void toggleStar()}
+              >
+                <Star className={`w-4 h-4 mr-2 ${isStarred ? 'fill-amber-400 text-amber-500' : ''}`} />
+                {isStarred ? 'Favorited' : 'Favorite'}
+              </Button>
+              <Button
+                size="sm"
                 className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 shadow-lg hover:shadow-xl transition-all duration-300"
                 onClick={savePrompt}
                 disabled={isSaving}
@@ -554,6 +659,22 @@ function PromptStudio() {
         </div>
       </div>
 
+      {editingProd && (
+        <div className="border-b bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 text-sm">
+            You are editing production. The previous working copy is parked on the Shelf.
+            Publishing restores the shelf automatically. Cancel from Version History to abort.
+          </div>
+        </div>
+      )}
+      {drifted && !editingProd && (
+        <div className="border-b bg-sky-50 text-sky-950 dark:bg-sky-950/40 dark:text-sky-100">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 text-sm">
+            Dev is ahead of Prod. Publish from Version History when this working copy should go live.
+          </div>
+        </div>
+      )}
+
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
           {/* Sidebar */}
@@ -561,9 +682,20 @@ function PromptStudio() {
             {/* Recent Prompts */}
             <Card className="shadow-xl border-0 bg-white">
               <CardHeader className="border-b border-gray-100">
-                <CardTitle className="text-lg flex items-center">
-                  <History className="w-5 h-5 mr-2 text-blue-600" />
-                  Recent Prompts
+                <CardTitle className="text-lg flex items-center justify-between">
+                  <span className="flex items-center">
+                    <History className="w-5 h-5 mr-2 text-blue-600" />
+                    Prompts
+                  </span>
+                  <button
+                    type="button"
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                    onClick={() =>
+                      setSidebarFilter((value) => (value === 'all' ? 'starred' : 'all'))
+                    }
+                  >
+                    {sidebarFilter === 'starred' ? 'Show all' : 'Favorites'}
+                  </button>
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-4 space-y-3">
@@ -574,14 +706,26 @@ function PromptStudio() {
                 ) : recentPrompts.length === 0 ? (
                   <p className="text-sm text-gray-500 text-center py-4">No prompts yet. Create your first one!</p>
                 ) : (
-                  recentPrompts.slice(0, 5).map((recentPrompt) => (
+                  recentPrompts
+                    .filter((item) =>
+                      sidebarFilter === 'starred'
+                        ? item.is_starred === true || item.is_starred === 1
+                        : true
+                    )
+                    .slice(0, 8)
+                    .map((recentPrompt) => (
                     <div
                       key={recentPrompt.id}
                       className="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors"
                       onClick={() => loadPrompt(recentPrompt)}
                     >
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 truncate">{recentPrompt.name}</p>
+                        <p className="text-sm font-medium text-gray-900 truncate">
+                          {recentPrompt.is_starred === true || recentPrompt.is_starred === 1
+                            ? '★ '
+                            : ''}
+                          {recentPrompt.name}
+                        </p>
                         <p className="text-xs text-gray-500">
                           {new Date(recentPrompt.updated_at).toLocaleDateString()}
                         </p>
@@ -641,6 +785,16 @@ function PromptStudio() {
                       />
                     </div>
                     <div>
+                      <Label htmlFor="prompt-tags" className="text-sm font-medium">Tags</Label>
+                      <Input
+                        id="prompt-tags"
+                        placeholder="support, refunds, production"
+                        className="mt-2 border-gray-200"
+                        value={promptTags}
+                        onChange={(e) => setPromptTags(e.target.value)}
+                      />
+                    </div>
+                    <div>
                       <PromptAssistPanel
                         prompt={prompt}
                         promptId={promptId}
@@ -688,10 +842,15 @@ function PromptStudio() {
                         <Variables className="w-5 h-5 mr-2 text-blue-600" />
                         Variables
                       </div>
-                      <Button size="sm" variant="outline" onClick={addVariable} className="bg-blue-50 hover:bg-blue-100 text-blue-600 border-blue-200">
-                        <Plus className="w-4 h-4 mr-2" />
-                        Add Variable
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="outline" onClick={() => void saveTestFixture()}>
+                          Save test values
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={addVariable} className="bg-blue-50 hover:bg-blue-100 text-blue-600 border-blue-200">
+                          <Plus className="w-4 h-4 mr-2" />
+                          Add Variable
+                        </Button>
+                      </div>
                     </CardTitle>
                     <CardDescription>
                       Define variables that can be dynamically replaced in your prompt.
@@ -973,12 +1132,11 @@ function PromptStudio() {
                     temperature,
                     max_tokens: maxTokens,
                   }}
-                  onRevert={(version) => {
-                    setPrompt(version.content);
-                    setSelectedModel(version.model);
-                    setTemperature(version.temperature);
-                    setMaxTokens(version.max_tokens);
-                    extractVariablesFromPrompt();
+                  refreshKey={versionRefreshKey}
+                  onWorkingCopyChange={applyWorkingCopy}
+                  onLanesChange={(state) => {
+                    setEditingProd(state.editingProd);
+                    setDrifted(state.drifted);
                   }}
                 />
               </TabsContent>

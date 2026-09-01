@@ -8,6 +8,7 @@ import {
   requireSession,
   toPublicRecords,
 } from '@/lib/ncb-server';
+import { maybeSnapshotForIoChange } from '@/lib/prompt-versions';
 
 function validateFields(fields: unknown[]): boolean {
   return fields.every((field) => {
@@ -162,6 +163,14 @@ export async function PUT(
     const fields = await ncbRead('endpoint_fields', cookieHeader, {
       endpoint_id: id,
     });
+
+    const linkedPromptId = endpoint.prompt_id ? String(endpoint.prompt_id) : '';
+    if (linkedPromptId) {
+      const prompt = await findByPublicId('prompts', cookieHeader, linkedPromptId);
+      if (prompt) {
+        await maybeSnapshotForIoChange(cookieHeader, user.id, prompt);
+      }
+    }
 
     return NextResponse.json({ fields: toPublicRecords(fields) });
   } catch (error) {

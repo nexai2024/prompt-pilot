@@ -22,7 +22,8 @@ import {
   Sparkles,
   ArrowUpRight,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  ScrollText
 } from 'lucide-react';
 import { GettingStarted } from '@/components/GettingStarted';
 import { toast } from 'sonner';
@@ -180,6 +181,14 @@ export default function Dashboard() {
       color: 'from-green-500 to-emerald-500',
       href: '/analytics',
       action: 'View'
+    },
+    {
+      title: 'Release notes',
+      description: 'See what shipped to production',
+      icon: ScrollText,
+      color: 'from-violet-500 to-purple-500',
+      href: '/releases',
+      action: 'Review'
     },
     {
       title: 'Deploy API',

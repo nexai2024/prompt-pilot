@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Brain, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 const AUTH_ONLY_PATHS = new Set(['/sign-in', '/sign-up', '/reset-password', '/auth/callback']);
 
@@ -47,6 +48,7 @@ const NAV = [
     href: '/deployments',
     children: [
       { href: '/deployments', label: 'Deployments', hint: 'Publish and health-check' },
+      { href: '/releases', label: 'Release notes', hint: 'Production changelogs' },
       { href: '/analytics', label: 'Analytics', hint: 'Usage, latency, and cost' },
     ],
   },
@@ -74,6 +76,7 @@ export default function AuthHeader() {
   const [session, setSession] = useState<{ user?: { email?: string; name?: string } } | null>(
     null
   );
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -85,6 +88,13 @@ export default function AuthHeader() {
       })
       .catch(() => setSession(null))
       .finally(() => setLoading(false));
+
+    fetch('/api/profile', { credentials: 'include' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.user?.avatarUrl) setAvatarUrl(String(data.user.avatarUrl));
+      })
+      .catch(() => undefined);
   }, []);
 
   const handleSignOut = async () => {
@@ -196,6 +206,16 @@ export default function AuthHeader() {
             </>
           ) : (
             <>
+              {avatarUrl ? (
+                <Avatar className="h-8 w-8">
+                  <AvatarImage src={avatarUrl} alt={session?.user?.name || 'Profile'} />
+                  <AvatarFallback>
+                    {(session?.user?.name || session?.user?.email || '?')
+                      .slice(0, 2)
+                      .toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+              ) : null}
               <AccountButton />
               <Button variant="outline" size="sm" onClick={handleSignOut}>
                 Sign out

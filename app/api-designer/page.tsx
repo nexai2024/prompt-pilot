@@ -117,6 +117,7 @@ export default function APIDesigner() {
   const [deploying, setDeploying] = useState(false);
   const [deployDialogOpen, setDeployDialogOpen] = useState(false);
   const [deployEnvironment, setDeployEnvironment] = useState<DeployEnvironment>('production');
+  const [deployChangelog, setDeployChangelog] = useState('');
   const [useCustomDomain, setUseCustomDomain] = useState(false);
   const [orgDomains, setOrgDomains] = useState<OrgDomainSettings | null>(null);
 
@@ -449,6 +450,7 @@ export default function APIDesigner() {
           endpoint_id: endpoint.id,
           environment: deployEnvironment,
           use_custom_domain: useCustomDomain,
+          changelog: deployChangelog,
         }),
       });
       const data = await response.json();
@@ -567,6 +569,22 @@ export default function APIDesigner() {
             )}
 
             {deployEnvironment === 'production' && (
+              <div>
+                <Label htmlFor="deploy-changelog">Production changelog</Label>
+                <Textarea
+                  id="deploy-changelog"
+                  className="mt-1 min-h-[90px]"
+                  value={deployChangelog}
+                  onChange={(event) => setDeployChangelog(event.target.value)}
+                  placeholder="What is going live? e.g. Added required order_id and tightened refund wording."
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Required for production. At least 8 characters.
+                </p>
+              </div>
+            )}
+
+            {deployEnvironment === 'production' && (
               <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
                 Production requests require an API key. Create one in Settings → API Keys and pass{' '}
                 <code>Authorization: Bearer pp_live_...</code> or <code>X-API-Key</code>.
@@ -598,7 +616,10 @@ export default function APIDesigner() {
               onClick={() => {
                 void deployEndpoint();
               }}
-              disabled={deploying}
+              disabled={
+                deploying ||
+                (deployEnvironment === 'production' && deployChangelog.trim().length < 8)
+              }
               className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
             >
               {deploying ? (

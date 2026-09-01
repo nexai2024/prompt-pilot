@@ -14,6 +14,7 @@ import {
   type NcbRecord,
 } from '@/lib/ncb-server';
 import { renderPromptTemplate } from '@/lib/prompt-render';
+import { getPublishedVersion } from '@/lib/prompt-versions';
 import {
   normalizePath,
   parseTenantHost,
@@ -230,18 +231,24 @@ async function handleGateway(
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
     }
 
-    const prompt = await findByPublicId('prompts', '', promptId);
-    if (!prompt) {
-      return NextResponse.json({ error: 'Linked prompt not found' }, { status: 503 });
+    const published = await getPublishedVersion('', promptId);
+    if (!published) {
+      return NextResponse.json(
+        {
+          error:
+            'This prompt has not been published yet. Deploy it to populate production.',
+        },
+        { status: 503 }
+      );
     }
 
     const renderedPrompt = renderPromptTemplate(
-      String(prompt.content || ''),
+      String(published.content || ''),
       variables
     );
-    const model = String(prompt.model || 'gpt-3.5-turbo');
-    const temperature = Number(prompt.temperature ?? 0.7);
-    const maxTokens = Number(prompt.max_tokens ?? 1000);
+    const model = String(published.model || 'gpt-3.5-turbo');
+    const temperature = Number(published.temperature ?? 0.7);
+    const maxTokens = Number(published.max_tokens ?? 1000);
 
     if (!process.env.OPENAI_API_KEY) {
       return NextResponse.json(

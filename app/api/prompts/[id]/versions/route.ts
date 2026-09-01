@@ -1,14 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
   findByPublicId,
-  ncbCreate,
-  ncbRead,
-  ncbUpdate,
-  newSupabaseId,
   requireSession,
   toPublicRecord,
   toPublicRecords,
 } from '@/lib/ncb-server';
+import {
+  createManualSnapshot,
+  ensureSystemLanes,
+  listPromptVersions,
+  saveWorkingCopy,
+  serializeLanes,
+  type PromptVariableInput,
+} from '@/lib/prompt-versions';
 
 export async function GET(
   req: NextRequest,
@@ -18,15 +22,20 @@ export async function GET(
 
   try {
     const cookieHeader = req.headers.get('cookie') || '';
-    await requireSession(cookieHeader);
+    const user = await requireSession(cookieHeader);
 
-    const versions = await ncbRead('prompt_versions', cookieHeader, {
-      prompt_id: id,
-      sort: 'version_number',
-      order: 'desc',
+    const prompt = await findByPublicId('prompts', cookieHeader, id);
+    if (!prompt) {
+      return NextResponse.json({ error: 'Prompt not found' }, { status: 404 });
+    }
+
+    const lanes = await ensureSystemLanes(cookieHeader, user.id, prompt);
+    const versions = await listPromptVersions(cookieHeader, id);
+
+    return NextResponse.json({
+      ...serializeLanes(lanes),
+      versions: toPublicRecords(versions),
     });
-
-    return NextResponse.json({ versions: toPublicRecords(versions) });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     const status = message === 'Unauthorized' ? 401 : 500;
@@ -43,70 +52,47 @@ export async function POST(
   try {
     const cookieHeader = req.headers.get('cookie') || '';
     const user = await requireSession(cookieHeader);
-    const body = await req.json();
-    const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
-
-    const existingVersions = await ncbRead('prompt_versions', cookieHeader, {
-      prompt_id: id,
-      sort: 'version_number',
-      order: 'desc',
-      limit: '1',
-    });
-
-    const nextVersionNumber =
-      existingVersions.length > 0
-        ? Number(existingVersions[0]?.version_number || 0) + 1
-        : 1;
-
-    const version = await ncbCreate('prompt_versions', cookieHeader, {
-      supabase_id: newSupabaseId(),
-      prompt_id: id,
-      version_number: nextVersionNumber,
-      content: body.content,
-      model: body.model,
-      temperature: body.temperature,
-      max_tokens: body.max_tokens,
-      created_by: user.id,
-      created_at: now,
-      user_id: user.id,
-    });
-
-    return NextResponse.json(
-      { version: toPublicRecord(version) },
-      { status: 201 }
-    );
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    const status = message === 'Unauthorized' ? 401 : 500;
-    return NextResponse.json({ error: message }, { status });
-  }
-}
-
-export async function PUT(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const { id } = await params;
-
-  try {
-    const cookieHeader = req.headers.get('cookie') || '';
-    await requireSession(cookieHeader);
 
     const prompt = await findByPublicId('prompts', cookieHeader, id);
-    if (!prompt?.id) {
+    if (!prompt) {
       return NextResponse.json({ error: 'Prompt not found' }, { status: 404 });
     }
 
-    const body = await req.json();
-    const updatedPrompt = await ncbUpdate('prompts', cookieHeader, prompt.id, {
-      content: body.content,
-      model: body.model,
-      temperature: body.temperature,
-      max_tokens: body.max_tokens,
-      updated_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
-    });
+    let body: {
+      content?: string;
+      model?: string;
+      temperature?: number;
+      max_tokens?: number;
+      response_format?: string;
+      variables?: PromptVariableInput[];
+    } = {};
+    try {
+      body = (await req.json()) as typeof body;
+    } catch {
+      body = {};
+    }
 
-    return NextResponse.json({ prompt: toPublicRecord(updatedPrompt) });
+    if (typeof body.content === 'string' && body.content.trim()) {
+      await saveWorkingCopy(cookieHeader, user.id, prompt, {
+        content: body.content,
+        model: String(body.model || prompt.model || 'gpt-4'),
+        temperature: Number(body.temperature ?? prompt.temperature ?? 0.7),
+        max_tokens: Number(body.max_tokens ?? prompt.max_tokens ?? 150),
+        response_format: String(body.response_format || prompt.response_format || 'text'),
+        variables: Array.isArray(body.variables) ? body.variables : undefined,
+      });
+    }
+
+    const version = await createManualSnapshot(cookieHeader, user.id, prompt);
+    const lanes = await ensureSystemLanes(cookieHeader, user.id, prompt);
+
+    return NextResponse.json(
+      {
+        version: toPublicRecord(version),
+        versioning: serializeLanes(lanes),
+      },
+      { status: 201 }
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     const status = message === 'Unauthorized' ? 401 : 500;

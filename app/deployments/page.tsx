@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { PublishChangelogDialog } from '@/components/PublishChangelogDialog';
 import { toast } from 'sonner';
 import {
   ArrowLeft,
@@ -25,6 +26,15 @@ import {
   Loader2,
 } from 'lucide-react';
 
+interface LiveSnapshot {
+  versionNumber: number;
+  changelog: string;
+  published: boolean;
+  drifted: boolean;
+  previousSnapshotId: string | null;
+  previousVersionNumber: number | null;
+}
+
 interface Deployment {
   id: string;
   name: string;
@@ -36,6 +46,9 @@ interface Deployment {
   custom_domain?: string | null;
   deployed_at?: string | null;
   error_message?: string | null;
+  prompt_id?: string | null;
+  prompt_name?: string | null;
+  live_snapshot?: LiveSnapshot | null;
 }
 
 interface HealthResult {
@@ -61,6 +74,8 @@ export default function Deployments() {
   const [environmentFilter, setEnvironmentFilter] = useState('all');
   const [healthChecks, setHealthChecks] = useState<Record<string, HealthResult>>({});
   const [checkingHealth, setCheckingHealth] = useState<string | null>(null);
+  const [rollbackTarget, setRollbackTarget] = useState<Deployment | null>(null);
+  const [rollingBack, setRollingBack] = useState(false);
 
   useEffect(() => {
     async function loadDeployments() {
@@ -86,6 +101,11 @@ export default function Deployments() {
             custom_domain: d.custom_domain ? String(d.custom_domain) : null,
             deployed_at: d.deployed_at ? String(d.deployed_at) : null,
             error_message: d.error_message ? String(d.error_message) : null,
+            prompt_id: d.prompt_id ? String(d.prompt_id) : null,
+            prompt_name: d.prompt_name ? String(d.prompt_name) : null,
+            live_snapshot: d.live_snapshot
+              ? (d.live_snapshot as LiveSnapshot)
+              : null,
           }))
         );
       } catch (err) {
@@ -126,6 +146,47 @@ export default function Deployments() {
       toast.error(err instanceof Error ? err.message : 'Health check failed');
     } finally {
       setCheckingHealth(null);
+    }
+  };
+
+  const copyCurl = async (deployment: Deployment) => {
+    const curl = `curl -X POST '${deployment.url}' \\
+  -H 'Content-Type: application/json' \\
+  -H 'Authorization: Bearer pp_live_YOUR_KEY' \\
+  -d '{"input":"hello"}'`;
+    await navigator.clipboard.writeText(curl);
+    toast.success('Copied live request as cURL');
+  };
+
+  const rollbackProd = async (changelog: string) => {
+    if (!rollbackTarget?.prompt_id || !rollbackTarget.live_snapshot?.previousSnapshotId) {
+      return;
+    }
+    setRollingBack(true);
+    try {
+      const response = await fetch(
+        `/api/prompts/${rollbackTarget.prompt_id}/versions/rollback-prod`,
+        {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            snapshotId: rollbackTarget.live_snapshot.previousSnapshotId,
+            changelog,
+          }),
+        }
+      );
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Rollback failed');
+      toast.success(
+        `Production rolled back to v${rollbackTarget.live_snapshot.previousVersionNumber}`
+      );
+      setRollbackTarget(null);
+      window.location.reload();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Rollback failed');
+    } finally {
+      setRollingBack(false);
     }
   };
 
@@ -364,6 +425,16 @@ export default function Deployments() {
                       <Button
                         size="sm"
                         variant="outline"
+                        onClick={() => void copyCurl(deployment)}
+                      >
+                        <Copy className="w-4 h-4 mr-2" />
+                        Copy cURL
+                      </Button>
+                    )}
+                    {deployment.url && (
+                      <Button
+                        size="sm"
+                        variant="outline"
                         onClick={() => navigator.clipboard.writeText(deployment.url)}
                       >
                         <Copy className="w-4 h-4 mr-2" />
@@ -379,6 +450,55 @@ export default function Deployments() {
                     <code className="text-sm bg-gray-100 px-2 py-1 rounded font-mono">
                       {deployment.url}
                     </code>
+                  </div>
+                )}
+
+                {deployment.live_snapshot && (
+                  <div className="mt-4 rounded-lg border bg-muted/40 p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-medium">
+                          Live snapshot{' '}
+                          {deployment.live_snapshot.published
+                            ? `v${deployment.live_snapshot.versionNumber}`
+                            : 'not published'}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {deployment.prompt_name
+                            ? `Prompt: ${deployment.prompt_name}`
+                            : 'No linked prompt'}
+                          {deployment.live_snapshot.drifted
+                            ? ' · Dev is ahead of Prod'
+                            : ''}
+                        </p>
+                        {deployment.live_snapshot.changelog ? (
+                          <p className="mt-2 text-sm">{deployment.live_snapshot.changelog}</p>
+                        ) : (
+                          <p className="mt-2 text-sm text-muted-foreground">
+                            No changelog on the live snapshot yet.
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {deployment.prompt_id && (
+                          <Button size="sm" variant="outline" asChild>
+                            <Link href={`/prompt-studio?promptId=${deployment.prompt_id}`}>
+                              Open prompt
+                            </Link>
+                          </Button>
+                        )}
+                        {deployment.live_snapshot.previousSnapshotId &&
+                          deployment.prompt_id && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setRollbackTarget(deployment)}
+                            >
+                              Roll back to v{deployment.live_snapshot.previousVersionNumber}
+                            </Button>
+                          )}
+                      </div>
+                    </div>
                   </div>
                 )}
 
@@ -440,6 +560,21 @@ export default function Deployments() {
           </Card>
         )}
       </div>
+      <PublishChangelogDialog
+        open={Boolean(rollbackTarget)}
+        title="Roll back production"
+        description={
+          rollbackTarget?.live_snapshot?.previousVersionNumber
+            ? `This replaces live traffic with snapshot v${rollbackTarget.live_snapshot.previousVersionNumber}. Dev is left alone.`
+            : 'This replaces live traffic with the previous snapshot. Dev is left alone.'
+        }
+        confirmLabel="Roll back"
+        pending={rollingBack}
+        onOpenChange={(open) => {
+          if (!open) setRollbackTarget(null);
+        }}
+        onConfirm={(changelog) => void rollbackProd(changelog)}
+      />
     </div>
   );
 }

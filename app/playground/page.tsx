@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { readStore, writeStore } from '@/lib/local-store';
+import { parseFixtures } from '@/lib/prompt-meta';
 import { Loader2, Play, Terminal } from 'lucide-react';
 
 interface EndpointOption {
@@ -23,6 +24,7 @@ interface EndpointOption {
 interface PromptOption {
   id: string;
   name: string;
+  test_fixtures?: string | null;
 }
 
 interface HistoryItem {
@@ -54,7 +56,13 @@ export default function PlaygroundPage() {
       const nextEndpoints = Array.isArray(endpointData.endpoints) ? endpointData.endpoints : [];
       const nextPrompts = Array.isArray(promptData.prompts) ? promptData.prompts : [];
       setEndpoints(nextEndpoints);
-      setPrompts(nextPrompts);
+      setPrompts(
+        nextPrompts.map((prompt: PromptOption) => ({
+          id: String(prompt.id),
+          name: String(prompt.name),
+          test_fixtures: prompt.test_fixtures || null,
+        }))
+      );
       if (nextEndpoints[0]) {
         setEndpointId(String(nextEndpoints[0].id));
         if (nextEndpoints[0].prompt_id) setPromptId(String(nextEndpoints[0].prompt_id));
@@ -74,6 +82,40 @@ export default function PlaygroundPage() {
       setPromptId(String(selectedEndpoint.prompt_id));
     }
   }, [selectedEndpoint]);
+
+  useEffect(() => {
+    const selected = prompts.find((item) => item.id === promptId);
+    if (!selected?.test_fixtures) return;
+    const fixtures = parseFixtures(selected.test_fixtures);
+    if (Object.keys(fixtures).length === 0) return;
+    setBody(JSON.stringify(fixtures, null, 2));
+  }, [promptId, prompts]);
+
+  const saveFixture = async () => {
+    if (!promptId) {
+      toast.error('Select a prompt first');
+      return;
+    }
+    try {
+      const parsed = body.trim() ? JSON.parse(body) : {};
+      const response = await fetch(`/api/prompts/${promptId}`, {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ test_fixtures: parsed }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not save fixture');
+      setPrompts((current) =>
+        current.map((item) =>
+          item.id === promptId ? { ...item, test_fixtures: JSON.stringify(parsed) } : item
+        )
+      );
+      toast.success('Saved as this prompt’s test fixture');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not save fixture');
+    }
+  };
 
   const run = async () => {
     if (!promptId) {
@@ -125,10 +167,15 @@ export default function PlaygroundPage() {
         title="API Playground"
         description="Send JSON variables through a prompt-backed endpoint and inspect the live model response."
         actions={
-          <Button onClick={() => void run()} disabled={loading}>
-            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
-            Send request
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => void saveFixture()}>
+              Save fixture
+            </Button>
+            <Button onClick={() => void run()} disabled={loading}>
+              {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
+              Send request
+            </Button>
+          </div>
         }
       />
 

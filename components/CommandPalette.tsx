@@ -19,6 +19,7 @@ import {
   Home,
   LayoutTemplate,
   Rocket,
+  ScrollText,
   Settings,
   Sparkles,
   Terminal,
@@ -119,6 +120,10 @@ export function CommandPalette() {
           <CommandItem onSelect={() => navigate('/deployments')}>
             <Rocket className="mr-2 h-4 w-4" />
             Deployments
+          </CommandItem>
+          <CommandItem onSelect={() => navigate('/releases')}>
+            <ScrollText className="mr-2 h-4 w-4" />
+            Release notes
           </CommandItem>
           <CommandItem onSelect={() => navigate('/analytics')}>
             <Sparkles className="mr-2 h-4 w-4" />

@@ -9,6 +9,13 @@ import {
   toPublicRecord,
   toPublicRecords,
 } from '@/lib/ncb-server';
+import {
+  ensureSystemLanes,
+  replacePromptVariables,
+  serializeLanes,
+  type PromptVariableInput,
+} from '@/lib/prompt-versions';
+import { encodeTags, parseTags } from '@/lib/prompt-meta';
 
 export async function GET(req: NextRequest) {
   try {
@@ -74,12 +81,32 @@ export async function POST(req: NextRequest) {
       content_filtering: boolToInt(content_filtering),
       caching: boolToInt(caching),
       status,
+      tags: encodeTags(parseTags(body.tags)),
+      is_starred: boolToInt(Boolean(body.is_starred)),
       created_at: now,
       updated_at: now,
       user_id: user.id,
     });
 
-    return NextResponse.json({ prompt: toPublicRecord(prompt) }, { status: 201 });
+    if (Array.isArray(body.variables)) {
+      const promptId = String(prompt.supabase_id || '');
+      await replacePromptVariables(
+        cookieHeader,
+        user.id,
+        promptId,
+        body.variables as PromptVariableInput[]
+      );
+    }
+
+    const lanes = await ensureSystemLanes(cookieHeader, user.id, prompt);
+
+    return NextResponse.json(
+      {
+        prompt: toPublicRecord(prompt),
+        versioning: { snapshotCreated: false, ...serializeLanes(lanes) },
+      },
+      { status: 201 }
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     const status =

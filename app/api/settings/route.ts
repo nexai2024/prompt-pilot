@@ -127,20 +127,50 @@ export async function PUT(req: NextRequest) {
       timezone?: string;
       email_notifications?: boolean;
       marketing_notifications?: boolean;
+      avatar_url?: string | null;
     };
 
-    const firstName = String(body.first_name || '').trim();
-    const lastName = String(body.last_name || '').trim();
-    const email = String(body.email || user.email || '').trim();
-    const company = String(body.company || '').trim();
-    const bio = String(body.bio || '').trim();
-    const timezone = String(body.timezone || 'utc+0').trim();
+    const existing = await ncbRead('profiles', cookieHeader, { user_id: user.id });
+    const current = existing[0];
+
+    const firstName =
+      body.first_name !== undefined
+        ? String(body.first_name || '').trim()
+        : String(current?.first_name || '');
+    const lastName =
+      body.last_name !== undefined
+        ? String(body.last_name || '').trim()
+        : String(current?.last_name || '');
+    const email = String(body.email || current?.email || user.email || '').trim();
+    const company =
+      body.company !== undefined
+        ? String(body.company || '').trim()
+        : String(current?.company || '');
+    const bio =
+      body.bio !== undefined ? String(body.bio || '').trim() : String(current?.bio || '');
+    const timezone = String(
+      body.timezone || current?.timezone || 'utc+0'
+    ).trim();
 
     if (!email) {
       return NextResponse.json({ error: 'Email is required' }, { status: 400 });
     }
     if (!email.includes('@')) {
       return NextResponse.json({ error: 'Enter a valid email address' }, { status: 400 });
+    }
+
+    let avatarUrl =
+      body.avatar_url !== undefined ? body.avatar_url : current?.avatar_url;
+    if (typeof avatarUrl === 'string') {
+      if (avatarUrl && !avatarUrl.startsWith('data:image/') && !avatarUrl.startsWith('http')) {
+        return NextResponse.json({ error: 'Avatar must be an image' }, { status: 400 });
+      }
+      if (avatarUrl.length > 180000) {
+        return NextResponse.json(
+          { error: 'Avatar is too large. Use a smaller image.' },
+          { status: 400 }
+        );
+      }
     }
 
     const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
@@ -151,14 +181,21 @@ export async function PUT(req: NextRequest) {
       company: company || null,
       bio: bio || null,
       timezone,
-      email_notifications: boolToInt(Boolean(body.email_notifications)),
-      marketing_notifications: boolToInt(Boolean(body.marketing_notifications)),
+      avatar_url: avatarUrl || null,
+      email_notifications: boolToInt(
+        body.email_notifications !== undefined
+          ? Boolean(body.email_notifications)
+          : current?.email_notifications === 1 || current?.email_notifications === true
+      ),
+      marketing_notifications: boolToInt(
+        body.marketing_notifications !== undefined
+          ? Boolean(body.marketing_notifications)
+          : current?.marketing_notifications === 1 ||
+              current?.marketing_notifications === true
+      ),
       updated_at: now,
       user_id: user.id,
     };
-
-    const existing = await ncbRead('profiles', cookieHeader, { user_id: user.id });
-    const current = existing[0];
 
     const saved = current?.id
       ? await ncbUpdate('profiles', cookieHeader, Number(current.id), payload)

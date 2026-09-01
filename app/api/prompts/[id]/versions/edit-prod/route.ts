@@ -1,40 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server';
-import {
-  findByPublicId,
-  requireSession,
-  toPublicRecord,
-} from '@/lib/ncb-server';
-import { copyVersionIntoDev, serializeLanes } from '@/lib/prompt-versions';
+import { findByPublicId, requireSession, toPublicRecord } from '@/lib/ncb-server';
+import { editProduction, serializeLanes } from '@/lib/prompt-versions';
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string; versionId: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id, versionId } = await params;
+  const { id } = await params;
 
   try {
     const cookieHeader = req.headers.get('cookie') || '';
     const user = await requireSession(cookieHeader);
-
     const prompt = await findByPublicId('prompts', cookieHeader, id);
     if (!prompt) {
       return NextResponse.json({ error: 'Prompt not found' }, { status: 404 });
     }
 
-    const version = await findByPublicId('prompt_versions', cookieHeader, versionId);
-    if (!version) {
-      return NextResponse.json({ error: 'Version not found' }, { status: 404 });
-    }
-
-    const lanes = await copyVersionIntoDev(cookieHeader, user.id, prompt, version);
-
+    const lanes = await editProduction(cookieHeader, user.id, prompt);
     return NextResponse.json({
       prompt: toPublicRecord({ ...prompt, ...lanes.dev }),
       versioning: serializeLanes(lanes),
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    const status = message === 'Unauthorized' ? 401 : 500;
+    const status =
+      message === 'Unauthorized'
+        ? 401
+        : message.includes('empty') || message.includes('Already')
+          ? 400
+          : 500;
     return NextResponse.json({ error: message }, { status });
   }
 }

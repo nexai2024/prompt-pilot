@@ -89,7 +89,15 @@ export function toPublicId(record: NcbRecord): string {
 export function toPublicRecord<T extends NcbRecord>(
   record: T
 ): T & { id: string } {
-  const boolFields = ['streaming', 'content_filtering', 'caching', 'required'];
+  const boolFields = [
+    'streaming',
+    'content_filtering',
+    'caching',
+    'required',
+    'locked',
+    'populated',
+    'is_starred',
+  ];
 
   const mapped: Record<string, unknown> = {
     ...record,

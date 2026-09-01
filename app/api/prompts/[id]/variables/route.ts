@@ -8,6 +8,10 @@ import {
   toPublicRecord,
   toPublicRecords,
 } from '@/lib/ncb-server';
+import {
+  replacePromptVariables,
+  type PromptVariableInput,
+} from '@/lib/prompt-versions';
 
 export async function GET(
   req: NextRequest,
@@ -44,8 +48,16 @@ export async function POST(
     const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
 
     const variableInputs = Array.isArray(body.variables)
-      ? body.variables
-      : [body];
+      ? (body.variables as PromptVariableInput[])
+      : [body as PromptVariableInput];
+
+    if (Array.isArray(body.variables)) {
+      await replacePromptVariables(cookieHeader, user.id, id, variableInputs);
+      const variables = await ncbRead('prompt_variables', cookieHeader, {
+        prompt_id: id,
+      });
+      return NextResponse.json({ variables: toPublicRecords(variables) }, { status: 201 });
+    }
 
     const created = [];
     for (const variable of variableInputs) {

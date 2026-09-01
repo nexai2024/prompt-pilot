@@ -70,6 +70,7 @@ function shouldRedirectToTenantApp(request: NextRequest): string | null {
     '/lab',
     '/playground',
     '/evals',
+    '/releases',
   ];
 
   if (appRoutes.some((route) => pathname === route || pathname.startsWith(`${route}/`))) {

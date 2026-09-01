@@ -18,6 +18,8 @@ import {
   isDeployEnvironment,
   type DeployEnvironment,
 } from '@/lib/tenant-domains';
+import { promoteDevToProd, readLiveSnapshot } from '@/lib/prompt-versions';
+import { validateChangelog } from '@/lib/changelog';
 
 function nextVersion(existingCount: number): string {
   const patch = existingCount + 1;
@@ -29,12 +31,54 @@ export async function GET(req: NextRequest) {
     const cookieHeader = req.headers.get('cookie') || '';
     await requireSession(cookieHeader);
 
-    const deployments = await ncbRead('deployments', cookieHeader, {
-      sort: 'created_at',
-      order: 'desc',
-    });
+    const [deployments, endpoints, prompts] = await Promise.all([
+      ncbRead('deployments', cookieHeader, {
+        sort: 'created_at',
+        order: 'desc',
+      }),
+      ncbRead('api_endpoints', cookieHeader),
+      ncbRead('prompts', cookieHeader),
+    ]);
 
-    return NextResponse.json({ deployments: toPublicRecords(deployments) });
+    const endpointById = new Map(
+      endpoints.map((endpoint) => [toPublicId(endpoint), endpoint])
+    );
+    const promptById = new Map(
+      prompts.map((prompt) => [toPublicId(prompt), prompt])
+    );
+    const liveCache = new Map<string, Awaited<ReturnType<typeof readLiveSnapshot>>>();
+
+    const enriched = [];
+    for (const deployment of toPublicRecords(deployments)) {
+      const endpoint = endpointById.get(String(deployment.endpoint_id || ''));
+      const promptId = endpoint?.prompt_id ? String(endpoint.prompt_id) : '';
+      const prompt = promptId ? promptById.get(promptId) : undefined;
+      let live = null;
+      if (promptId) {
+        if (!liveCache.has(promptId)) {
+          liveCache.set(promptId, await readLiveSnapshot(cookieHeader, promptId));
+        }
+        live = liveCache.get(promptId) ?? null;
+      }
+
+      enriched.push({
+        ...deployment,
+        prompt_id: promptId || null,
+        prompt_name: prompt ? String(prompt.name || '') : null,
+        live_snapshot: live
+          ? {
+              versionNumber: live.versionNumber,
+              changelog: live.changelog || String(deployment.changelog || ''),
+              published: live.populated,
+              drifted: live.drifted,
+              previousSnapshotId: live.previousSnapshotId,
+              previousVersionNumber: live.previousVersionNumber,
+            }
+          : null,
+      });
+    }
+
+    return NextResponse.json({ deployments: enriched });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     const status = message === 'Unauthorized' ? 401 : 500;
@@ -129,6 +173,32 @@ export async function POST(req: NextRequest) {
     });
     const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
 
+    let changelog = '';
+    try {
+      changelog =
+        environment === 'production'
+          ? validateChangelog(body.changelog)
+          : String(body.changelog || '').trim() || `Deployed to ${environment}`;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Invalid changelog';
+      return NextResponse.json({ error: message }, { status: 400 });
+    }
+
+    const linkedPromptId = endpoint.prompt_id ? String(endpoint.prompt_id) : '';
+    let promptVersion: number | null = null;
+    if (linkedPromptId) {
+      const prompt = await findByPublicId('prompts', cookieHeader, linkedPromptId);
+      if (prompt) {
+        const lanes = await promoteDevToProd(
+          cookieHeader,
+          user.id,
+          prompt,
+          changelog
+        );
+        promptVersion = Number(lanes.prod.version_number || 0);
+      }
+    }
+
     const existingDeployments = await ncbRead('deployments', cookieHeader, {
       endpoint_id: endpointPublicId,
     });
@@ -152,6 +222,8 @@ export async function POST(req: NextRequest) {
       deployed_at: now,
       updated_at: now,
       user_id: user.id,
+      changelog,
+      prompt_version: promptVersion,
     };
 
     let record;

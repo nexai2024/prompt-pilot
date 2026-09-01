@@ -23,6 +23,7 @@ export const TENANT_APP_ROUTES = new Set([
   '/lab',
   '/playground',
   '/evals',
+  '/releases',
   '/sign-in',
   '/sign-up',
   '/reset-password',

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -123,6 +123,8 @@ export default function SettingsPage() {
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [marketingNotifications, setMarketingNotifications] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
   const [subscription, setSubscription] = useState<SubscriptionRecord | null>(null);
   const [domains, setDomains] = useState<DomainSettings | null>(null);
   const [vanitySubdomainInput, setVanitySubdomainInput] = useState('');
@@ -242,6 +244,48 @@ export default function SettingsPage() {
       toast.error(error instanceof Error ? error.message : 'Failed to save profile');
     } finally {
       setSavingProfile(false);
+    }
+  };
+
+  const fileToAvatarDataUrl = async (file: File): Promise<string> => {
+    if (!['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(file.type)) {
+      throw new Error('Use JPG, PNG, GIF, or WebP');
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      throw new Error('Choose an image under 2MB');
+    }
+    const bitmap = await createImageBitmap(file);
+    const canvas = document.createElement('canvas');
+    const max = 256;
+    const scale = Math.min(max / bitmap.width, max / bitmap.height, 1);
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('Could not process image');
+    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL('image/jpeg', 0.86);
+  };
+
+  const uploadAvatar = async (file: File) => {
+    setUploadingAvatar(true);
+    try {
+      const avatarUrl = await fileToAvatarDataUrl(file);
+      const response = await fetch('/api/settings', {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ avatar_url: avatarUrl }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to save avatar');
+      }
+      setProfile(data.profile || { ...profile, avatar_url: avatarUrl });
+      toast.success('Avatar saved');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to save avatar');
+    } finally {
+      setUploadingAvatar(false);
     }
   };
 
@@ -520,12 +564,33 @@ export default function SettingsPage() {
                     <AvatarFallback>{profileInitials}</AvatarFallback>
                   </Avatar>
                   <div>
-                    <Button variant="outline" size="sm">
-                      <Upload className="w-4 h-4 mr-2" />
-                      Change Avatar
+                    <input
+                      ref={avatarInputRef}
+                      type="file"
+                      accept="image/png,image/jpeg,image/gif,image/webp"
+                      className="hidden"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        event.target.value = '';
+                        if (file) void uploadAvatar(file);
+                      }}
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      type="button"
+                      disabled={uploadingAvatar}
+                      onClick={() => avatarInputRef.current?.click()}
+                    >
+                      {uploadingAvatar ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <Upload className="w-4 h-4 mr-2" />
+                      )}
+                      {uploadingAvatar ? 'Saving...' : 'Change Avatar'}
                     </Button>
                     <p className="text-sm text-gray-500 mt-2">
-                      JPG, GIF or PNG. 1MB max.
+                      JPG, GIF or PNG. 1MB max after resize.
                     </p>
                   </div>
                 </div>
