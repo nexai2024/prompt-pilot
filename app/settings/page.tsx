@@ -66,6 +66,8 @@ interface ProfileRecord {
   bio?: string | null;
   timezone?: string | null;
   avatar_url?: string | null;
+  email_notifications?: boolean | number | null;
+  marketing_notifications?: boolean | number | null;
 }
 
 interface SubscriptionRecord {
@@ -112,6 +114,15 @@ export default function SettingsPage() {
   const [profile, setProfile] = useState<ProfileRecord | null>(null);
   const [userEmail, setUserEmail] = useState('');
   const [userName, setUserName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [profileEmail, setProfileEmail] = useState('');
+  const [company, setCompany] = useState('');
+  const [bio, setBio] = useState('');
+  const [timezone, setTimezone] = useState('utc+0');
+  const [emailNotifications, setEmailNotifications] = useState(true);
+  const [marketingNotifications, setMarketingNotifications] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
   const [subscription, setSubscription] = useState<SubscriptionRecord | null>(null);
   const [domains, setDomains] = useState<DomainSettings | null>(null);
   const [vanitySubdomainInput, setVanitySubdomainInput] = useState('');
@@ -145,6 +156,30 @@ export default function SettingsPage() {
           setSubscription(data.subscription || null);
           setUserEmail(data.user?.email || '');
           setUserName(data.user?.name || '');
+          const nameParts = String(data.user?.name || '')
+            .trim()
+            .split(/\s+/);
+          setFirstName(data.profile?.first_name || nameParts[0] || '');
+          setLastName(data.profile?.last_name || nameParts.slice(1).join(' ') || '');
+          setProfileEmail(data.profile?.email || data.user?.email || '');
+          setCompany(data.profile?.company || '');
+          setBio(data.profile?.bio || '');
+          const loadedTimezone = String(data.profile?.timezone || 'utc+0');
+          setTimezone(
+            loadedTimezone === 'UTC' || loadedTimezone === 'utc' ? 'utc+0' : loadedTimezone
+          );
+          setEmailNotifications(
+            data.profile?.email_notifications !== false &&
+              data.profile?.email_notifications !== 0
+          );
+          setMarketingNotifications(Boolean(data.profile?.marketing_notifications));
+          setNotifications((current) => ({
+            ...current,
+            email:
+              data.profile?.email_notifications !== false &&
+              data.profile?.email_notifications !== 0,
+            marketing: Boolean(data.profile?.marketing_notifications),
+          }));
         }
 
         const domainsResponse = await fetch('/api/organizations/domains', {
@@ -173,6 +208,42 @@ export default function SettingsPage() {
 
     loadSettings();
   }, []);
+
+  const saveProfile = async () => {
+    if (!profileEmail.trim()) {
+      toast.error('Email is required');
+      return;
+    }
+
+    setSavingProfile(true);
+    try {
+      const response = await fetch('/api/settings', {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          first_name: firstName,
+          last_name: lastName,
+          email: profileEmail,
+          company,
+          bio,
+          timezone,
+          email_notifications: emailNotifications,
+          marketing_notifications: marketingNotifications,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to save profile');
+      }
+      setProfile(data.profile || null);
+      toast.success('Profile saved');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to save profile');
+    } finally {
+      setSavingProfile(false);
+    }
+  };
 
   const saveVanitySubdomain = async () => {
     setSavingDomains(true);
@@ -349,7 +420,7 @@ export default function SettingsPage() {
     }
   };
 
-  const profileInitials = [profile?.first_name, profile?.last_name]
+  const profileInitials = [firstName, lastName]
     .filter(Boolean)
     .map((part) => String(part)[0])
     .join('') || userName?.split(' ').map((part) => part[0]).join('') || userEmail?.[0]?.toUpperCase() || '?';
@@ -406,9 +477,17 @@ export default function SettingsPage() {
                 <h1 className="text-xl font-bold text-gray-900">Settings</h1>
               </div>
             </div>
-            <Button size="sm" className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700">
-              <Save className="w-4 h-4 mr-2" />
-              Save Changes
+            <Button
+              size="sm"
+              onClick={() => void saveProfile()}
+              disabled={savingProfile}
+            >
+              {savingProfile ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Save className="w-4 h-4 mr-2" />
+              )}
+              {savingProfile ? 'Saving...' : 'Save Changes'}
             </Button>
           </div>
         </div>
@@ -454,19 +533,40 @@ export default function SettingsPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <Label htmlFor="first-name">First Name</Label>
-                    <Input id="first-name" defaultValue={profile?.first_name || ''} className="mt-1" />
+                    <Input
+                      id="first-name"
+                      value={firstName}
+                      onChange={(event) => setFirstName(event.target.value)}
+                      className="mt-1"
+                    />
                   </div>
                   <div>
                     <Label htmlFor="last-name">Last Name</Label>
-                    <Input id="last-name" defaultValue={profile?.last_name || ''} className="mt-1" />
+                    <Input
+                      id="last-name"
+                      value={lastName}
+                      onChange={(event) => setLastName(event.target.value)}
+                      className="mt-1"
+                    />
                   </div>
                   <div>
                     <Label htmlFor="email">Email Address</Label>
-                    <Input id="email" type="email" defaultValue={profile?.email || userEmail} className="mt-1" />
+                    <Input
+                      id="email"
+                      type="email"
+                      value={profileEmail}
+                      onChange={(event) => setProfileEmail(event.target.value)}
+                      className="mt-1"
+                    />
                   </div>
                   <div>
                     <Label htmlFor="company">Company</Label>
-                    <Input id="company" defaultValue={profile?.company || ''} className="mt-1" />
+                    <Input
+                      id="company"
+                      value={company}
+                      onChange={(event) => setCompany(event.target.value)}
+                      className="mt-1"
+                    />
                   </div>
                 </div>
 
@@ -476,14 +576,15 @@ export default function SettingsPage() {
                     id="bio"
                     placeholder="Tell us about yourself..."
                     className="mt-1"
-                    defaultValue={profile?.bio || ''}
+                    value={bio}
+                    onChange={(event) => setBio(event.target.value)}
                   />
                 </div>
 
                 <div>
                   <Label htmlFor="timezone">Timezone</Label>
-                  <Select defaultValue={profile?.timezone || 'utc+0'}>
-                    <SelectTrigger className="mt-1">
+                  <Select value={timezone} onValueChange={setTimezone}>
+                    <SelectTrigger id="timezone" className="mt-1">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -495,6 +596,16 @@ export default function SettingsPage() {
                       <SelectItem value="utc+1">Central European Time (UTC+1)</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+                <div className="flex justify-end">
+                  <Button onClick={() => void saveProfile()} disabled={savingProfile}>
+                    {savingProfile ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <Save className="w-4 h-4 mr-2" />
+                    )}
+                    {savingProfile ? 'Saving...' : 'Save profile'}
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -512,14 +623,26 @@ export default function SettingsPage() {
                     <Label className="text-sm font-medium">Email Notifications</Label>
                     <p className="text-sm text-gray-500">Receive email notifications for important updates</p>
                   </div>
-                  <Switch defaultChecked />
+                  <Switch
+                    checked={emailNotifications}
+                    onCheckedChange={(checked) => {
+                      setEmailNotifications(checked);
+                      setNotifications((current) => ({ ...current, email: checked }));
+                    }}
+                  />
                 </div>
                 <div className="flex items-center justify-between">
                   <div>
                     <Label className="text-sm font-medium">Marketing Communications</Label>
                     <p className="text-sm text-gray-500">Receive emails about new features and updates</p>
                   </div>
-                  <Switch />
+                  <Switch
+                    checked={marketingNotifications}
+                    onCheckedChange={(checked) => {
+                      setMarketingNotifications(checked);
+                      setNotifications((current) => ({ ...current, marketing: checked }));
+                    }}
+                  />
                 </div>
                 <div className="flex items-center justify-between">
                   <div>
@@ -875,7 +998,10 @@ export default function SettingsPage() {
                       </div>
                       <Switch
                         checked={notifications.email}
-                        onCheckedChange={(checked) => setNotifications({...notifications, email: checked})}
+                        onCheckedChange={(checked) => {
+                          setEmailNotifications(checked);
+                          setNotifications({ ...notifications, email: checked });
+                        }}
                       />
                     </div>
                     <div className="flex items-center justify-between">
@@ -935,7 +1061,10 @@ export default function SettingsPage() {
                       </div>
                       <Switch
                         checked={notifications.marketing}
-                        onCheckedChange={(checked) => setNotifications({...notifications, marketing: checked})}
+                        onCheckedChange={(checked) => {
+                          setMarketingNotifications(checked);
+                          setNotifications({ ...notifications, marketing: checked });
+                        }}
                       />
                     </div>
                   </div>
