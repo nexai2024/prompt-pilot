@@ -5,6 +5,8 @@ import { Suspense } from 'react';
 import { Toaster } from '@/components/ui/sonner';
 import AuthHeader from '@/components/AuthHeader';
 import { CommandPalette } from '@/components/CommandPalette';
+import { KeyboardShortcuts } from '@/components/KeyboardShortcuts';
+import { RecentTracker } from '@/components/RecentTracker';
 import { TenantBootstrap } from '@/components/TenantBootstrap';
 import { ThemeProvider } from '@/components/theme-provider';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -39,6 +41,8 @@ export default function RootLayout({
             <AuthHeader />
             <Suspense fallback={null}>
               <CommandPalette />
+              <KeyboardShortcuts />
+              <RecentTracker />
               <TenantBootstrap />
             </Suspense>
             {children}

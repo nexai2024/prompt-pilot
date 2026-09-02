@@ -14,6 +14,7 @@ import {
 import {
   BarChart3,
   Brain,
+  Clock,
   Code,
   FlaskConical,
   Home,
@@ -24,6 +25,7 @@ import {
   Sparkles,
   Terminal,
 } from 'lucide-react';
+import { getLastPrompt, getRecentPages, OPEN_COMMAND_PALETTE } from '@/lib/recents';
 
 interface PromptOption {
   id: string;
@@ -34,6 +36,8 @@ export function CommandPalette() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [prompts, setPrompts] = useState<PromptOption[]>([]);
+  const [recentPages, setRecentPages] = useState<Array<{ href: string; label: string }>>([]);
+  const [lastPrompt, setLastPrompt] = useState<{ id: string; name: string } | null>(null);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -43,12 +47,21 @@ export function CommandPalette() {
       }
     };
 
+    const onOpen = () => setOpen(true);
+
     document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
+    window.addEventListener(OPEN_COMMAND_PALETTE, onOpen);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener(OPEN_COMMAND_PALETTE, onOpen);
+    };
   }, []);
 
   useEffect(() => {
     if (!open) return;
+
+    setRecentPages(getRecentPages().map((page) => ({ href: page.href, label: page.label })));
+    setLastPrompt(getLastPrompt());
 
     void fetch('/api/prompts', { credentials: 'include' })
       .then((res) => res.json())
@@ -78,6 +91,22 @@ export function CommandPalette() {
       <CommandInput placeholder="Search pages and prompts..." />
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
+        {(lastPrompt || recentPages.length > 0) && (
+          <CommandGroup heading="Continue">
+            {lastPrompt ? (
+              <CommandItem onSelect={() => navigate(`/prompt-studio?promptId=${lastPrompt.id}`)}>
+                <Clock className="mr-2 h-4 w-4" />
+                Resume {lastPrompt.name}
+              </CommandItem>
+            ) : null}
+            {recentPages.slice(0, 5).map((page) => (
+              <CommandItem key={page.href} onSelect={() => navigate(page.href)}>
+                <Clock className="mr-2 h-4 w-4" />
+                {page.label}
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
         <CommandGroup heading="Home">
           <CommandItem onSelect={() => navigate('/dashboard')}>
             <Home className="mr-2 h-4 w-4" />

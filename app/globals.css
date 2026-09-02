@@ -77,6 +77,10 @@
     font-feature-settings: "ss01" 1, "cv11" 1;
   }
 
+  html.pp-focus-mode header {
+    display: none;
+  }
+
   code,
   kbd,
   pre,

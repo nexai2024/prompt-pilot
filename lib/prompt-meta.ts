@@ -3,14 +3,36 @@ export function parseTags(value: unknown): string[] {
     return value.map((tag) => String(tag).trim()).filter(Boolean);
   }
   if (typeof value !== 'string' || !value.trim()) return [];
-  return value
+
+  const raw = value.trim();
+  if (raw.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (Array.isArray(parsed)) {
+        return parsed.map((tag) => String(tag).trim()).filter(Boolean);
+      }
+    } catch {
+      return [];
+    }
+  }
+
+  if (raw.startsWith('{') && raw.endsWith('}')) {
+    return raw
+      .slice(1, -1)
+      .split(',')
+      .map((tag) => tag.trim().replace(/^"|"$/g, ''))
+      .filter(Boolean);
+  }
+
+  return raw
     .split(/[,#]/)
     .map((tag) => tag.trim())
     .filter(Boolean);
 }
 
 export function encodeTags(tags: string[]): string {
-  return Array.from(new Set(tags.map((tag) => tag.trim()).filter(Boolean))).join(',');
+  const unique = Array.from(new Set(tags.map((tag) => tag.trim()).filter(Boolean)));
+  return JSON.stringify(unique);
 }
 
 export function parseFixtures(value: unknown): Record<string, string> {

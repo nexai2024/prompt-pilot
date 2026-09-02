@@ -13,7 +13,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Brain, ChevronDown } from 'lucide-react';
+import { Brain, ChevronDown, Keyboard, Search } from 'lucide-react';
+import { openCommandPalette, openShortcutsOverlay } from '@/lib/recents';
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
@@ -193,7 +194,34 @@ export default function AuthHeader() {
         )}
 
         <div className="flex shrink-0 items-center gap-1.5">
-          {isAuthed ? <NotificationCenter /> : null}
+          {isAuthed ? (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="hidden gap-1.5 md:inline-flex"
+                onClick={openCommandPalette}
+              >
+                <Search className="h-4 w-4" />
+                <span>Search</span>
+                <kbd className="rounded border bg-muted px-1.5 font-mono text-[10px] text-muted-foreground">
+                  ⌘K
+                </kbd>
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={openShortcutsOverlay}
+                aria-label="Keyboard shortcuts"
+              >
+                <Keyboard className="h-4 w-4" />
+              </Button>
+              <NotificationCenter />
+            </>
+          ) : null}
           <ThemeToggle />
           {!isAuthed ? (
             <>

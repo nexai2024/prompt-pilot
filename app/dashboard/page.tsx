@@ -26,6 +26,8 @@ import {
   ScrollText
 } from 'lucide-react';
 import { GettingStarted } from '@/components/GettingStarted';
+import { getLastPrompt, getRecentPages } from '@/lib/recents';
+import { firstNameFrom, formatRelativeTime, greetingForHour } from '@/lib/relative-time';
 import { toast } from 'sonner';
 
 interface DashboardStats {
@@ -88,9 +90,20 @@ export default function Dashboard() {
   const [qualitySummary, setQualitySummary] = useState<QualitySummary | null>(null);
   const [scoredPrompts, setScoredPrompts] = useState<ScoredPrompt[]>([]);
   const [loading, setLoading] = useState(true);
+  const [firstName, setFirstName] = useState('');
+  const [lastPrompt, setLastPrompt] = useState<{ id: string; name: string; at: number } | null>(null);
+  const [recentPages, setRecentPages] = useState<Array<{ href: string; label: string }>>([]);
 
   useEffect(() => {
     loadDashboardStats();
+    setLastPrompt(getLastPrompt());
+    setRecentPages(getRecentPages().filter((page) => page.href !== '/dashboard').slice(0, 4));
+    fetch('/api/profile', { credentials: 'include' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        setFirstName(firstNameFrom(data?.user?.name));
+      })
+      .catch(() => undefined);
   }, []);
 
   const loadDashboardStats = async () => {
@@ -258,31 +271,60 @@ export default function Dashboard() {
         <div className="rounded-2xl border bg-card p-8 mb-8">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-2xl font-semibold mb-2">Welcome back</h2>
+              <h2 className="text-2xl font-semibold mb-2">
+                {greetingForHour(new Date().getHours())}
+                {firstName ? `, ${firstName}` : ''}
+              </h2>
               <p className="text-muted-foreground mb-4">
                 Score, compare, and ship prompts as production APIs.
               </p>
-              <div className="flex items-center space-x-4">
-                <Button
-                  size="lg"
-                  asChild
-                >
-                  <Link href="/prompt-studio">
-                    <Plus className="w-5 h-5 mr-2" />
-                    New prompt
-                  </Link>
-                </Button>
-                <Button
-                  size="lg"
-                  variant="outline"
-                  asChild
-                >
-                  <Link href="/templates">
-                    <Sparkles className="w-5 h-5 mr-2" />
-                    Browse templates
+              <div className="flex flex-wrap items-center gap-3">
+                {lastPrompt ? (
+                  <Button size="lg" asChild>
+                    <Link href={`/prompt-studio?promptId=${lastPrompt.id}`}>
+                      <Brain className="w-5 h-5 mr-2" />
+                      Resume {lastPrompt.name}
+                    </Link>
+                  </Button>
+                ) : (
+                  <Button size="lg" asChild>
+                    <Link href="/prompt-studio">
+                      <Plus className="w-5 h-5 mr-2" />
+                      New prompt
+                    </Link>
+                  </Button>
+                )}
+                <Button size="lg" variant="outline" asChild>
+                  <Link href={lastPrompt ? '/prompt-studio' : '/templates'}>
+                    {lastPrompt ? (
+                      <>
+                        <Plus className="w-5 h-5 mr-2" />
+                        New prompt
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-5 h-5 mr-2" />
+                        Browse templates
+                      </>
+                    )}
                   </Link>
                 </Button>
               </div>
+              {recentPages.length > 0 ? (
+                <div className="mt-5 flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-muted-foreground">Jump back</span>
+                  {recentPages.map((page) => (
+                    <Button key={page.href} variant="secondary" size="sm" asChild>
+                      <Link href={page.href}>{page.label}</Link>
+                    </Button>
+                  ))}
+                </div>
+              ) : null}
+              {lastPrompt ? (
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Last edited {formatRelativeTime(lastPrompt.at)}
+                </p>
+              ) : null}
             </div>
             <div className="hidden lg:block text-muted-foreground">
               <Sparkles className="w-24 h-24 opacity-30" />

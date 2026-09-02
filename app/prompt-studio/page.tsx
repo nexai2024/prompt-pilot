@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, Suspense } from 'react';
+import { useState, useEffect, useMemo, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -12,12 +12,17 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, Play, Save, Settings, Brain, Zap, Plus, Copy, Trash2, Edit, TestTube, Variable as Variables, History, Download, Upload, RefreshCw, Check, X, AlertTriangle, Sparkles, Code, Wand2, Loader2, Star } from 'lucide-react';
+import { ArrowLeft, Play, Save, Settings, Brain, Plus, Copy, Trash2, Edit, TestTube, Variable as Variables, History, Download, Upload, Sparkles, Code, Loader2, Star, Link2, Search, Maximize2, Minimize2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { VersionHistory } from '@/components/prompt-studio/VersionHistory';
 import { PromptAssistPanel } from '@/components/prompt-studio/PromptAssistPanel';
 import { PromptScorePanel } from '@/components/prompt-studio/PromptScorePanel';
 import { parseFixtures, parseTags } from '@/lib/prompt-meta';
+import { getLastPrompt, rememberPrompt } from '@/lib/recents';
+import { estimatePromptTokens, formatRelativeTime } from '@/lib/relative-time';
+import { readStore, writeStore } from '@/lib/local-store';
+
+const FOCUS_MODE_KEY = 'pp-focus-mode';
 
 interface Variable {
   id?: string;
@@ -47,6 +52,32 @@ interface Prompt {
   test_fixtures?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+type EditorSnapshot = {
+  name: string;
+  description: string;
+  content: string;
+  model: string;
+  temperature: number;
+  maxTokens: number;
+  responseFormat: string;
+  streaming: boolean;
+  contentFiltering: boolean;
+  caching: boolean;
+  tags: string;
+  starred: boolean;
+  variables: Array<{
+    name: string;
+    value: string;
+    type: string;
+    description: string;
+    required: boolean;
+  }>;
+};
+
+function serializeEditor(snapshot: EditorSnapshot): string {
+  return JSON.stringify(snapshot);
 }
 
 export default function PromptStudioPage() {
@@ -96,11 +127,60 @@ function PromptStudio() {
   const [isStarred, setIsStarred] = useState(false);
   const [promptTags, setPromptTags] = useState('');
   const [sidebarFilter, setSidebarFilter] = useState<'all' | 'starred'>('all');
+  const [sidebarSearch, setSidebarSearch] = useState('');
+  const [savedSnapshot, setSavedSnapshot] = useState(() =>
+    serializeEditor({
+      name: '',
+      description: '',
+      content: '',
+      model: 'gpt-4',
+      temperature: 0.7,
+      maxTokens: 150,
+      responseFormat: 'text',
+      streaming: false,
+      contentFiltering: true,
+      caching: true,
+      tags: '',
+      starred: false,
+      variables: [],
+    })
+  );
+  const [focusMode, setFocusMode] = useState(false);
+  const [focusHydrated, setFocusHydrated] = useState(false);
+  const promptTextRef = useRef<HTMLTextAreaElement>(null);
+  const skipResumeRef = useRef(false);
+  const savePromptRef = useRef<() => Promise<void>>(async () => undefined);
+  const testPromptRef = useRef<() => Promise<void>>(async () => undefined);
+  const focusModeRef = useRef(false);
 
   // Load recent prompts
   useEffect(() => {
     loadRecentPrompts();
+    setFocusMode(readStore(FOCUS_MODE_KEY, false));
+    setFocusHydrated(true);
   }, []);
+
+  useEffect(() => {
+    focusModeRef.current = focusMode;
+    document.documentElement.classList.toggle('pp-focus-mode', focusMode);
+    if (focusHydrated) {
+      writeStore(FOCUS_MODE_KEY, focusMode);
+    }
+    return () => {
+      document.documentElement.classList.remove('pp-focus-mode');
+    };
+  }, [focusMode, focusHydrated]);
+
+  const toggleFocusMode = (next?: boolean) => {
+    setFocusMode((current) => {
+      const value = next ?? !current;
+      if (value) {
+        toast.message('Focus mode', { description: 'Esc or ⌘. to show the full studio again.' });
+        requestAnimationFrame(() => promptTextRef.current?.focus());
+      }
+      return value;
+    });
+  };
 
   const loadRecentPrompts = async () => {
     try {
@@ -118,6 +198,99 @@ function PromptStudio() {
     } finally {
       setLoadingPrompts(false);
     }
+  };
+
+  const currentSnapshot = (): string =>
+    serializeEditor({
+      name: promptName,
+      description: promptDescription,
+      content: prompt,
+      model: selectedModel,
+      temperature,
+      maxTokens,
+      responseFormat,
+      streaming,
+      contentFiltering,
+      caching,
+      tags: promptTags,
+      starred: isStarred,
+      variables: variables.map((variable) => ({
+        name: variable.name,
+        value: variable.value || '',
+        type: variable.type,
+        description: variable.description,
+        required: variable.required,
+      })),
+    });
+
+  const isDirty = currentSnapshot() !== savedSnapshot;
+
+  const confirmDiscard = () => {
+    if (!isDirty) return true;
+    return window.confirm('You have unsaved changes. Discard them?');
+  };
+
+  const suggestedTags = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const item of recentPrompts) {
+      for (const tag of parseTags(item.tags)) {
+        counts.set(tag, (counts.get(tag) || 0) + 1);
+      }
+    }
+    return Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([tag]) => tag)
+      .slice(0, 12);
+  }, [recentPrompts]);
+
+  const selectedTags = parseTags(promptTags);
+
+  const filteredPrompts = useMemo(() => {
+    const query = sidebarSearch.trim().toLowerCase();
+    return recentPrompts.filter((item) => {
+      if (sidebarFilter === 'starred' && item.is_starred !== true && item.is_starred !== 1) {
+        return false;
+      }
+      if (!query) return true;
+      const tags = parseTags(item.tags).join(' ');
+      return `${item.name} ${item.description || ''} ${tags}`.toLowerCase().includes(query);
+    });
+  }, [recentPrompts, sidebarFilter, sidebarSearch]);
+
+  const promptTokenEstimate = estimatePromptTokens(prompt);
+  const tokenWarning = promptTokenEstimate > 3000;
+
+  const addTag = (tag: string) => {
+    if (selectedTags.includes(tag)) return;
+    setPromptTags([...selectedTags, tag].join(', '));
+  };
+
+  const insertVariable = (name: string) => {
+    const token = `{{${name}}}`;
+    const field = promptTextRef.current;
+    if (!field) {
+      setPrompt((current) => `${current}${token}`);
+      return;
+    }
+    const start = field.selectionStart ?? prompt.length;
+    const end = field.selectionEnd ?? prompt.length;
+    const next = `${prompt.slice(0, start)}${token}${prompt.slice(end)}`;
+    setPrompt(next);
+    requestAnimationFrame(() => {
+      field.focus();
+      const cursor = start + token.length;
+      field.setSelectionRange(cursor, cursor);
+    });
+  };
+
+  const copyStudioLink = async () => {
+    if (!promptId) {
+      toast.error('Save the prompt first to copy a shareable link');
+      return;
+    }
+    const url = `${window.location.origin}/prompt-studio?promptId=${promptId}`;
+    await navigator.clipboard.writeText(url);
+    toast.success('Copied Studio link');
   };
 
   const addVariable = () => {
@@ -230,24 +403,52 @@ function PromptStudio() {
       });
       const data = await response.json();
 
-      if (response.ok) {
-        setVariables(data.variables.map((v: {
-          id?: string;
-          name: string;
-          type?: string;
-          description?: string;
-          default_value?: string;
-          required?: boolean;
-        }) => ({
-          id: v.id,
-          name: v.name,
-          value: fixtures[v.name] || '',
-          type: v.type || 'string',
-          description: v.description || '',
-          default_value: v.default_value,
-          required: Boolean(v.required)
-        })));
-      }
+      const nextVariables: Variable[] = response.ok
+        ? data.variables.map((v: {
+            id?: string;
+            name: string;
+            type?: string;
+            description?: string;
+            default_value?: string;
+            required?: boolean;
+          }) => ({
+            id: v.id,
+            name: v.name,
+            value: fixtures[v.name] || '',
+            type: v.type || 'string',
+            description: v.description || '',
+            default_value: v.default_value,
+            required: Boolean(v.required)
+          }))
+        : [];
+      setVariables(nextVariables);
+
+      const tags = parseTags(promptToLoad.tags).join(', ');
+      const starred = promptToLoad.is_starred === true || promptToLoad.is_starred === 1;
+      setSavedSnapshot(
+        serializeEditor({
+          name: promptToLoad.name,
+          description: promptToLoad.description || '',
+          content: promptToLoad.content,
+          model: promptToLoad.model,
+          temperature: promptToLoad.temperature,
+          maxTokens: promptToLoad.max_tokens,
+          responseFormat: promptToLoad.response_format || 'text',
+          streaming: promptToLoad.streaming || false,
+          contentFiltering: promptToLoad.content_filtering ?? true,
+          caching: promptToLoad.caching ?? true,
+          tags,
+          starred,
+          variables: nextVariables.map((variable) => ({
+            name: variable.name,
+            value: variable.value || '',
+            type: variable.type,
+            description: variable.description,
+            required: variable.required,
+          })),
+        })
+      );
+      rememberPrompt(promptToLoad.id, promptToLoad.name);
 
       toast.success('Prompt loaded successfully');
     } catch (error) {
@@ -259,18 +460,19 @@ function PromptStudio() {
 
   useEffect(() => {
     const promptParam = searchParams.get('promptId') || searchParams.get('prompt');
-    if (!promptParam) return;
+    const resumeId = promptParam || (skipResumeRef.current ? null : getLastPrompt()?.id);
+    if (!resumeId) return;
 
     void (async () => {
       try {
         setIsLoading(true);
-        const response = await fetch(`/api/prompts/${promptParam}`, { credentials: 'include' });
+        const response = await fetch(`/api/prompts/${resumeId}`, { credentials: 'include' });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Failed to load prompt');
         await loadPrompt(data.prompt as Prompt);
         if (data.versioning?.drifted) setDrifted(true);
       } catch {
-        toast.error('Failed to load prompt from URL');
+        if (promptParam) toast.error('Failed to load prompt from URL');
       } finally {
         setIsLoading(false);
       }
@@ -334,6 +536,8 @@ function PromptStudio() {
       const savedPromptId = data.prompt.id;
       setPromptId(savedPromptId);
       setVersionRefreshKey((value) => value + 1);
+      setSavedSnapshot(currentSnapshot());
+      rememberPrompt(String(savedPromptId), promptName);
 
       if (data.versioning?.snapshotCreated) {
         toast.success('Saved. Created a new snapshot because the input/output structure changed.');
@@ -459,11 +663,48 @@ function PromptStudio() {
     }
   };
 
+  savePromptRef.current = savePrompt;
+  testPromptRef.current = testPrompt;
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key === 's') {
+        event.preventDefault();
+        void savePromptRef.current();
+      }
+      if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+        event.preventDefault();
+        void testPromptRef.current();
+      }
+      if ((event.metaKey || event.ctrlKey) && event.key === '.') {
+        event.preventDefault();
+        toggleFocusMode();
+      }
+      if (event.key === 'Escape' && focusModeRef.current) {
+        event.preventDefault();
+        toggleFocusMode(false);
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, []);
+
+  useEffect(() => {
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!isDirty) return;
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [isDirty]);
+
   const duplicatePrompt = () => {
     if (!prompt.trim() && !promptName.trim()) {
       toast.error('Nothing to duplicate');
       return;
     }
+    skipResumeRef.current = true;
     setPromptId(null);
     setPromptName(promptName ? `${promptName} (copy)` : 'Untitled Prompt (copy)');
     setEditingProd(false);
@@ -471,6 +712,8 @@ function PromptStudio() {
   };
 
   const newPrompt = () => {
+    if (!confirmDiscard()) return;
+    skipResumeRef.current = true;
     setPromptId(null);
     setPromptName('');
     setPromptDescription('');
@@ -485,6 +728,23 @@ function PromptStudio() {
     setDrifted(false);
     setIsStarred(false);
     setPromptTags('');
+    setSavedSnapshot(
+      serializeEditor({
+        name: '',
+        description: '',
+        content: '',
+        model: 'gpt-4',
+        temperature: 0.7,
+        maxTokens: 150,
+        responseFormat: 'text',
+        streaming: false,
+        contentFiltering: true,
+        caching: true,
+        tags: '',
+        starred: false,
+        variables: [],
+      })
+    );
     toast.success('New prompt created');
   };
 
@@ -521,6 +781,7 @@ function PromptStudio() {
   };
 
   const importPromptFile = async (file: File) => {
+    if (!confirmDiscard()) return;
     try {
       const text = await file.text();
       const data = JSON.parse(text) as Record<string, unknown>;
@@ -559,33 +820,53 @@ function PromptStudio() {
   return (
     <div className="min-h-screen bg-background">
       <div className="border-b bg-card/80 backdrop-blur">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center space-x-4">
-              <Button variant="ghost" size="sm" asChild>
-                <Link href="/dashboard">
-                  <ArrowLeft className="w-4 h-4 mr-2" />
-                  Back to Dashboard
-                </Link>
-              </Button>
-              <div className="h-6 w-px bg-gray-300" />
-              <div className="flex items-center space-x-2">
-                <div className="w-8 h-8 bg-gradient-to-r from-purple-600 to-pink-600 rounded-xl flex items-center justify-center shadow-lg">
+        <div className={`${focusMode ? 'max-w-5xl' : 'max-w-7xl'} mx-auto px-4 sm:px-6 lg:px-8`}>
+          <div className="flex items-center justify-between h-16 gap-3">
+            <div className="flex min-w-0 items-center space-x-4">
+              {!focusMode ? (
+                <>
+                  <Button variant="ghost" size="sm" asChild>
+                    <Link href="/dashboard">
+                      <ArrowLeft className="w-4 h-4 mr-2" />
+                      Back to Dashboard
+                    </Link>
+                  </Button>
+                  <div className="h-6 w-px bg-gray-300" />
+                </>
+              ) : null}
+              <div className="flex min-w-0 items-center space-x-2">
+                <div className="w-8 h-8 shrink-0 bg-gradient-to-r from-purple-600 to-pink-600 rounded-xl flex items-center justify-center shadow-lg">
                   <Brain className="w-5 h-5 text-white" />
                 </div>
-                <h1 className="text-xl font-semibold">Prompt Studio</h1>
-                <Badge className="bg-gradient-to-r from-purple-100 to-pink-100 text-purple-700 border-purple-200">
-                  <Sparkles className="w-3 h-3 mr-1" />
-                  AI-Powered
-                </Badge>
+                {focusMode ? (
+                  <Input
+                    value={promptName}
+                    onChange={(event) => setPromptName(event.target.value)}
+                    placeholder="Untitled prompt"
+                    className="h-8 max-w-xs border-transparent bg-transparent px-1 text-base font-semibold shadow-none focus-visible:border-input focus-visible:bg-background"
+                  />
+                ) : (
+                  <h1 className="text-xl font-semibold">Prompt Studio</h1>
+                )}
+                {!focusMode ? (
+                  <Badge className="bg-gradient-to-r from-purple-100 to-pink-100 text-purple-700 border-purple-200">
+                    <Sparkles className="w-3 h-3 mr-1" />
+                    AI-Powered
+                  </Badge>
+                ) : null}
                 {promptId && (
                   <Badge variant={editingProd ? 'destructive' : 'secondary'}>
                     {editingProd ? 'Editing production' : 'Dev'}
                   </Badge>
                 )}
+                {isDirty ? (
+                  <Badge variant="outline" className="border-amber-300 text-amber-700">
+                    Unsaved
+                  </Badge>
+                ) : null}
               </div>
             </div>
-            <div className="flex items-center space-x-3">
+            <div className="flex shrink-0 items-center space-x-3">
               <input
                 ref={importInputRef}
                 type="file"
@@ -597,49 +878,74 @@ function PromptStudio() {
                   event.target.value = '';
                 }}
               />
-              <Button variant="outline" size="sm" className="hidden sm:flex" asChild>
-                <Link href="/templates">
-                  <Sparkles className="w-4 h-4 mr-2" />
-                  Templates
-                </Link>
-              </Button>
-              <Button variant="outline" size="sm" className="hidden sm:flex" onClick={exportPrompt}>
-                <Download className="w-4 h-4 mr-2" />
-                Export
-              </Button>
+              {!focusMode ? (
+                <>
+                  <Button variant="outline" size="sm" className="hidden sm:flex" asChild>
+                    <Link href="/templates">
+                      <Sparkles className="w-4 h-4 mr-2" />
+                      Templates
+                    </Link>
+                  </Button>
+                  <Button variant="outline" size="sm" className="hidden sm:flex" onClick={exportPrompt}>
+                    <Download className="w-4 h-4 mr-2" />
+                    Export
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="hidden sm:flex"
+                    onClick={() => importInputRef.current?.click()}
+                  >
+                    <Upload className="w-4 h-4 mr-2" />
+                    Import
+                  </Button>
+                  <Button variant="outline" size="sm" className="hidden sm:flex" onClick={duplicatePrompt}>
+                    <Copy className="w-4 h-4 mr-2" />
+                    Duplicate
+                  </Button>
+                  {promptId && (
+                    <Button variant="outline" size="sm" className="hidden sm:flex" asChild>
+                      <Link href={`/api-designer?promptId=${promptId}`}>
+                        <Code className="w-4 h-4 mr-2" />
+                        Design API
+                      </Link>
+                    </Button>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="hidden sm:flex"
+                    onClick={() => void copyStudioLink()}
+                  >
+                    <Link2 className="w-4 h-4 mr-2" />
+                    Copy link
+                  </Button>
+                  <Button variant="outline" size="sm" className="hidden sm:flex" onClick={newPrompt}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    New Prompt
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="hidden sm:flex"
+                    onClick={() => void toggleStar()}
+                  >
+                    <Star className={`w-4 h-4 mr-2 ${isStarred ? 'fill-amber-400 text-amber-500' : ''}`} />
+                    {isStarred ? 'Favorited' : 'Favorite'}
+                  </Button>
+                </>
+              ) : null}
               <Button
-                variant="outline"
+                variant={focusMode ? 'default' : 'outline'}
                 size="sm"
-                className="hidden sm:flex"
-                onClick={() => importInputRef.current?.click()}
+                onClick={() => toggleFocusMode()}
               >
-                <Upload className="w-4 h-4 mr-2" />
-                Import
-              </Button>
-              <Button variant="outline" size="sm" className="hidden sm:flex" onClick={duplicatePrompt}>
-                <Copy className="w-4 h-4 mr-2" />
-                Duplicate
-              </Button>
-              {promptId && (
-                <Button variant="outline" size="sm" className="hidden sm:flex" asChild>
-                  <Link href={`/api-designer?promptId=${promptId}`}>
-                    <Code className="w-4 h-4 mr-2" />
-                    Design API
-                  </Link>
-                </Button>
-              )}
-              <Button variant="outline" size="sm" className="hidden sm:flex" onClick={newPrompt}>
-                <Plus className="w-4 h-4 mr-2" />
-                New Prompt
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="hidden sm:flex"
-                onClick={() => void toggleStar()}
-              >
-                <Star className={`w-4 h-4 mr-2 ${isStarred ? 'fill-amber-400 text-amber-500' : ''}`} />
-                {isStarred ? 'Favorited' : 'Favorite'}
+                {focusMode ? (
+                  <Minimize2 className="w-4 h-4 mr-2" />
+                ) : (
+                  <Maximize2 className="w-4 h-4 mr-2" />
+                )}
+                {focusMode ? 'Exit focus' : 'Focus'}
               </Button>
               <Button
                 size="sm"
@@ -652,8 +958,9 @@ function PromptStudio() {
                 ) : (
                   <Save className="w-4 h-4 mr-2" />
                 )}
-                {isSaving ? 'Saving...' : 'Save Prompt'}
+                {isSaving ? 'Saving...' : 'Save'}
               </Button>
+              <span className="hidden text-[10px] text-muted-foreground lg:inline">⌘S</span>
             </div>
           </div>
         </div>
@@ -661,7 +968,7 @@ function PromptStudio() {
 
       {editingProd && (
         <div className="border-b bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 text-sm">
+          <div className={`${focusMode ? 'max-w-5xl' : 'max-w-7xl'} mx-auto px-4 sm:px-6 lg:px-8 py-2 text-sm`}>
             You are editing production. The previous working copy is parked on the Shelf.
             Publishing restores the shelf automatically. Cancel from Version History to abort.
           </div>
@@ -669,15 +976,16 @@ function PromptStudio() {
       )}
       {drifted && !editingProd && (
         <div className="border-b bg-sky-50 text-sky-950 dark:bg-sky-950/40 dark:text-sky-100">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 text-sm">
+          <div className={`${focusMode ? 'max-w-5xl' : 'max-w-7xl'} mx-auto px-4 sm:px-6 lg:px-8 py-2 text-sm`}>
             Dev is ahead of Prod. Publish from Version History when this working copy should go live.
           </div>
         </div>
       )}
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+      <div className={`${focusMode ? 'max-w-5xl' : 'max-w-7xl'} mx-auto px-4 sm:px-6 lg:px-8 ${focusMode ? 'py-5' : 'py-8'}`}>
+        <div className={focusMode ? '' : 'grid grid-cols-1 lg:grid-cols-4 gap-8'}>
           {/* Sidebar */}
+          {!focusMode ? (
           <div className="lg:col-span-1 space-y-6">
             {/* Recent Prompts */}
             <Card className="shadow-xl border-0 bg-white">
@@ -699,25 +1007,51 @@ function PromptStudio() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-4 space-y-3">
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                  <Input
+                    value={sidebarSearch}
+                    onChange={(event) => setSidebarSearch(event.target.value)}
+                    placeholder="Search name or tag"
+                    className="h-9 pl-8 text-sm"
+                  />
+                </div>
+                {suggestedTags.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {suggestedTags.slice(0, 6).map((tag) => (
+                      <button
+                        key={tag}
+                        type="button"
+                        className="rounded-full border px-2 py-0.5 text-[11px] text-muted-foreground hover:border-primary hover:text-foreground"
+                        onClick={() =>
+                          setSidebarSearch((current) => (current === tag ? '' : tag))
+                        }
+                      >
+                        {tag}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
                 {loadingPrompts ? (
                   <div className="text-center py-4">
                     <Loader2 className="w-6 h-6 animate-spin mx-auto text-gray-400" />
                   </div>
-                ) : recentPrompts.length === 0 ? (
-                  <p className="text-sm text-gray-500 text-center py-4">No prompts yet. Create your first one!</p>
+                ) : filteredPrompts.length === 0 ? (
+                  <p className="text-sm text-gray-500 text-center py-4">
+                    {recentPrompts.length === 0
+                      ? 'No prompts yet. Create your first one!'
+                      : 'No prompts match that search.'}
+                  </p>
                 ) : (
-                  recentPrompts
-                    .filter((item) =>
-                      sidebarFilter === 'starred'
-                        ? item.is_starred === true || item.is_starred === 1
-                        : true
-                    )
-                    .slice(0, 8)
-                    .map((recentPrompt) => (
+                  filteredPrompts.slice(0, sidebarSearch ? 20 : 8).map((recentPrompt) => (
                     <div
                       key={recentPrompt.id}
                       className="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors"
-                      onClick={() => loadPrompt(recentPrompt)}
+                      onClick={() => {
+                        if (recentPrompt.id === promptId) return;
+                        if (!confirmDiscard()) return;
+                        void loadPrompt(recentPrompt);
+                      }}
                     >
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-gray-900 truncate">
@@ -727,8 +1061,17 @@ function PromptStudio() {
                           {recentPrompt.name}
                         </p>
                         <p className="text-xs text-gray-500">
-                          {new Date(recentPrompt.updated_at).toLocaleDateString()}
+                          {formatRelativeTime(recentPrompt.updated_at)}
                         </p>
+                        {parseTags(recentPrompt.tags).length > 0 ? (
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {parseTags(recentPrompt.tags).slice(0, 3).map((tag) => (
+                              <span key={tag} className="text-[10px] text-muted-foreground">
+                                #{tag}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
                       <Badge variant={recentPrompt.status === 'deployed' ? 'default' : 'outline'} className="ml-2">
                         {recentPrompt.status}
@@ -739,21 +1082,23 @@ function PromptStudio() {
               </CardContent>
             </Card>
           </div>
+          ) : null}
 
           {/* Main Content */}
-          <div className="lg:col-span-3">
+          <div className={focusMode ? '' : 'lg:col-span-3'}>
             <Tabs defaultValue="editor" className="space-y-6">
-              <TabsList className="grid w-full grid-cols-5 bg-gray-100 p-1 rounded-xl">
+              <TabsList className={`grid w-full bg-gray-100 p-1 rounded-xl ${focusMode ? 'grid-cols-2' : 'grid-cols-5'}`}>
                 <TabsTrigger value="editor" className="rounded-lg">Prompt Editor</TabsTrigger>
-                <TabsTrigger value="score" className="rounded-lg">AI Score</TabsTrigger>
+                {!focusMode ? <TabsTrigger value="score" className="rounded-lg">AI Score</TabsTrigger> : null}
                 <TabsTrigger value="test" className="rounded-lg">Test & Debug</TabsTrigger>
-                <TabsTrigger value="settings" className="rounded-lg">Model Settings</TabsTrigger>
-                <TabsTrigger value="history" className="rounded-lg">Version History</TabsTrigger>
+                {!focusMode ? <TabsTrigger value="settings" className="rounded-lg">Model Settings</TabsTrigger> : null}
+                {!focusMode ? <TabsTrigger value="history" className="rounded-lg">Version History</TabsTrigger> : null}
               </TabsList>
 
               <TabsContent value="editor" className="space-y-6">
                 {/* Prompt Editor */}
                 <Card className="shadow-xl border-0 bg-white">
+                  {!focusMode ? (
                   <CardHeader className="border-b border-gray-100">
                     <CardTitle className="flex items-center">
                       <Edit className="w-5 h-5 mr-2 text-green-600" />
@@ -763,7 +1108,9 @@ function PromptStudio() {
                       Create your AI prompt. Use {'{{variable_name}}'} syntax for dynamic variables.
                     </CardDescription>
                   </CardHeader>
+                  ) : null}
                   <CardContent className="p-6 space-y-6">
+                    {!focusMode ? (
                     <div>
                       <Label htmlFor="prompt-name" className="text-sm font-medium">Prompt Name *</Label>
                       <Input
@@ -774,6 +1121,8 @@ function PromptStudio() {
                         onChange={(e) => setPromptName(e.target.value)}
                       />
                     </div>
+                    ) : null}
+                    {!focusMode ? (
                     <div>
                       <Label htmlFor="prompt-description" className="text-sm font-medium">Description</Label>
                       <Input
@@ -784,6 +1133,9 @@ function PromptStudio() {
                         onChange={(e) => setPromptDescription(e.target.value)}
                       />
                     </div>
+                    ) : null}
+                    {!focusMode ? (
+                    <>
                     <div>
                       <Label htmlFor="prompt-tags" className="text-sm font-medium">Tags</Label>
                       <Input
@@ -793,6 +1145,27 @@ function PromptStudio() {
                         value={promptTags}
                         onChange={(e) => setPromptTags(e.target.value)}
                       />
+                      {suggestedTags.length > 0 ? (
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {suggestedTags.map((tag) => {
+                            const active = selectedTags.includes(tag);
+                            return (
+                              <button
+                                key={tag}
+                                type="button"
+                                className={`rounded-full border px-2 py-0.5 text-[11px] ${
+                                  active
+                                    ? 'border-primary bg-primary/10 text-foreground'
+                                    : 'text-muted-foreground hover:border-primary'
+                                }`}
+                                onClick={() => addTag(tag)}
+                              >
+                                {tag}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : null}
                     </div>
                     <div>
                       <PromptAssistPanel
@@ -811,6 +1184,9 @@ function PromptStudio() {
                           if (newVars.length > 0) setVariables(newVars);
                         }}
                       />
+                    </div>
+                    </>
+                    ) : null}
                       <div className="flex items-center justify-between mb-2 mt-4">
                         <Label htmlFor="prompt-text" className="text-sm font-medium">Prompt Text *</Label>
                         <Button size="sm" variant="outline" onClick={extractVariablesFromPrompt}>
@@ -818,23 +1194,45 @@ function PromptStudio() {
                           Extract Variables
                         </Button>
                       </div>
+                      {variables.some((variable) => variable.name.trim()) ? (
+                        <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                          <span className="text-[11px] text-muted-foreground">Insert</span>
+                          {variables
+                            .filter((variable) => variable.name.trim())
+                            .map((variable) => (
+                              <button
+                                key={variable.name}
+                                type="button"
+                                className="rounded-md border px-2 py-0.5 font-mono text-[11px] hover:border-primary"
+                                onClick={() => insertVariable(variable.name)}
+                              >
+                                {`{{${variable.name}}}`}
+                              </button>
+                            ))}
+                        </div>
+                      ) : null}
                       <Textarea
                         id="prompt-text"
+                        ref={promptTextRef}
                         placeholder="Enter your prompt here. Use {{variable_name}} for dynamic content..."
-                        className="mt-2 min-h-[200px] font-mono border-gray-200 focus:border-purple-500 focus:ring-purple-500"
+                        className={`mt-2 font-mono border-gray-200 focus:border-purple-500 focus:ring-purple-500 ${
+                          focusMode ? 'min-h-[60vh]' : 'min-h-[200px]'
+                        }`}
                         value={prompt}
                         onChange={(e) => setPrompt(e.target.value)}
                       />
-                      <div className="flex items-center justify-between mt-2">
-                        <p className="text-xs text-gray-500">
-                          {prompt.length} characters
+                      <div className="mt-2 flex items-center justify-between gap-3">
+                        <p className={`text-xs ${tokenWarning ? 'text-amber-600' : 'text-gray-500'}`}>
+                          {prompt.length} characters · ≈ {promptTokenEstimate} prompt tokens
+                          {tokenWarning ? ' — getting long for smaller models' : ''}
                         </p>
+                        <p className="text-[11px] text-muted-foreground">⌘Enter to test</p>
                       </div>
-                    </div>
                   </CardContent>
                 </Card>
 
                 {/* Variables */}
+                {!focusMode ? (
                 <Card className="shadow-xl border-0 bg-white">
                   <CardHeader className="border-b border-gray-100">
                     <CardTitle className="flex items-center justify-between">
@@ -910,6 +1308,7 @@ function PromptStudio() {
                     )}
                   </CardContent>
                 </Card>
+                ) : null}
               </TabsContent>
 
               <TabsContent value="score" className="space-y-6">
